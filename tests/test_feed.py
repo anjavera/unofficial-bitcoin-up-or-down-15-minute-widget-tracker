@@ -62,7 +62,7 @@ class FakeWS:
         self.closed = True
 
 
-async def no_sleep(_):
+async def no_sleep(_delay, _stop):
     pass
 
 
@@ -85,7 +85,7 @@ def test_feed_reconnects_after_close():
     ticks = asyncio.run(scenario())
     assert len(ticks) == 1 and ticks[0].up_price == 0.955
     assert len(FakeWS.instances) == 2 and FakeWS.instances[0].closed
-    assert len(FakeWS.instances[1].subscribed) == 3  # current window plus two ahead
+    assert len(FakeWS.instances[1].subscribed) >= 5  # must cover a whole SESSION_SECONDS session
 
 
 def test_feed_stops_when_event_already_set():
@@ -96,3 +96,45 @@ def test_feed_stops_when_event_already_set():
 
     asyncio.run(scenario())
     assert FakeWS.instances == []
+
+
+class TickThenCloseWS(FakeWS):
+    async def subscribe_market_data_lite(self, request_id, slugs):
+        self.emit("message", LITE)
+        self.emit("close")
+
+
+def test_feed_backs_off_when_server_sends_a_tick_then_drops_every_time():
+    async def scenario():
+        FakeWS.instances, ticks, sleeps, stop = [], [], [], asyncio.Event()
+
+        async def record_sleep(delay, _stop):
+            sleeps.append(delay)
+
+        def on_tick(tick):
+            ticks.append(tick)
+            if len(ticks) == 4:
+                stop.set()
+
+        feed = LiveFeed(on_tick, ws_factory=TickThenCloseWS, creds=("id", "s"), sleep=record_sleep)
+        await asyncio.wait_for(feed.run(stop), timeout=5)
+        return sleeps
+
+    sleeps = asyncio.run(scenario())
+    assert len(sleeps) >= 2 and all(d > 0 for d in sleeps)
+    assert sleeps == sorted(sleeps)  # backoff grows instead of hammering the server
+
+
+class AlwaysCloseWS(FakeWS):
+    async def subscribe_market_data_lite(self, request_id, slugs):
+        self.emit("close")
+
+
+def test_backoff_wakes_immediately_on_stop():
+    async def scenario():
+        FakeWS.instances, stop = [], asyncio.Event()
+        feed = LiveFeed(lambda t: None, ws_factory=AlwaysCloseWS, creds=("id", "s"))  # default sleep
+        asyncio.get_running_loop().call_later(0.1, stop.set)
+        await asyncio.wait_for(feed.run(stop), timeout=2)  # would hang for the 5s+ backoff if stop is ignored
+
+    asyncio.run(scenario())

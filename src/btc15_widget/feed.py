@@ -11,7 +11,7 @@ from btc15_widget.model import LiveTick
 from btc15_widget.windows import window_slugs
 
 SESSION_SECONDS = 3600  # re-subscribe hourly so the window list stays current
-WINDOWS_TO_FOLLOW = 3
+WINDOWS_TO_FOLLOW = 6  # must cover SESSION_SECONDS plus the rest of the current window
 
 
 def _px(d) -> float | None:
@@ -36,23 +36,29 @@ def parse_lite(message: dict) -> LiveTick | None:
     )
 
 
+async def wait_or_stop(delay: float, stop: asyncio.Event) -> None:
+    """Sleep up to `delay` seconds, returning early if `stop` is set."""
+    try:
+        await asyncio.wait_for(stop.wait(), timeout=delay)
+    except asyncio.TimeoutError:
+        pass
+
+
 class LiveFeed:
     def __init__(self, on_tick: Callable[[LiveTick], None], ws_factory=MarketsWebSocket,
-                 creds: tuple[str, str] | None = None, sleep=asyncio.sleep) -> None:
+                 creds: tuple[str, str] | None = None, sleep=wait_or_stop) -> None:
         self.on_tick, self._factory, self._creds, self._sleep = on_tick, ws_factory, creds, sleep
 
     async def run(self, stop: asyncio.Event) -> None:
         creds = self._creds or load_credentials()
         failures = 0
         while not stop.is_set():
-            dropped, got_tick = asyncio.Event(), False
+            dropped = asyncio.Event()
             ws = self._factory(key_id=creds[0], secret_key=creds[1])
 
             def on_message(message: dict) -> None:
-                nonlocal got_tick
                 tick = parse_lite(message)
                 if tick:
-                    got_tick = True
                     self.on_tick(tick)
 
             ws.on("message", on_message)
@@ -75,6 +81,6 @@ class LiveFeed:
                     pass
             if stop.is_set():
                 return
-            failures = 0 if (got_tick or timed_out) else failures + 1
+            failures = 0 if timed_out else failures + 1  # any early drop backs off, even after a tick
             if not timed_out:
-                await self._sleep(min(5 * failures, 60))
+                await self._sleep(min(5 * failures, 60), stop)

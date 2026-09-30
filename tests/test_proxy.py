@@ -60,3 +60,13 @@ def test_apply_bias():
     assert apply_bias(None) is None
     assert apply_bias(100.0, 4.0) == 104.0
     assert apply_bias(100.0) == 100.0
+
+
+def test_composite_is_none_when_no_quote_is_near_the_median():
+    assert composite({"a": 100.0, "b": 200.0}) is None  # two exchanges far apart: neither is trusted
+    assert composite({"a": 1.0, "b": 1.0, "c": 2.0, "d": 2.0}) is None
+
+
+def test_composite_ignores_non_finite_quotes():
+    assert composite({"a": float("inf")}) is None
+    assert composite({"a": float("nan"), "b": 100.0}) == 100.0

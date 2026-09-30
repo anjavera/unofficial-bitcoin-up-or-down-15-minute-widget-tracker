@@ -1,6 +1,7 @@
 """Live BTC price proxy: composite of public exchange quotes (an approximation of BRTI)."""
 
 import json
+import math
 import statistics
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -29,12 +30,12 @@ def parse_quote(exchange: str, payload: dict) -> float:
 
 def composite(quotes: dict[str, float | None], max_dev: float = 0.05) -> float | None:
     """Mean of valid quotes, ignoring any more than `max_dev` from the median; None if none remain."""
-    valid = [v for v in quotes.values() if v is not None and v > 0]
+    valid = [v for v in quotes.values() if v is not None and math.isfinite(v) and v > 0]
     if not valid:
         return None
     median = statistics.median(valid)
     kept = [v for v in valid if abs(v - median) <= max_dev * median]
-    return statistics.fmean(kept)
+    return statistics.fmean(kept) if kept else None
 
 
 def fetch_quotes(get_json=http_get_json) -> dict[str, float | None]:
