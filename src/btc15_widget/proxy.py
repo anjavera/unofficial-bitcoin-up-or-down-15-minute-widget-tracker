@@ -13,7 +13,7 @@ QUOTE_URLS = {
 }
 
 
-def _http_get_json(url: str) -> dict:
+def http_get_json(url: str) -> dict:
     request = urllib.request.Request(url, headers={"User-Agent": "btc15-widget"})
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.load(response)
@@ -37,7 +37,7 @@ def composite(quotes: dict[str, float | None], max_dev: float = 0.05) -> float |
     return statistics.fmean(kept)
 
 
-def fetch_quotes(get_json=_http_get_json) -> dict[str, float | None]:
+def fetch_quotes(get_json=http_get_json) -> dict[str, float | None]:
     def one(item):
         exchange, url = item
         try:
