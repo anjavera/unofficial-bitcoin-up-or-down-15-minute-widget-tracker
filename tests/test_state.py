@@ -5,7 +5,7 @@ import pytest
 from btc15_widget.calibration import Calibration
 from btc15_widget.model import LiveTick, Window
 from btc15_widget.state import STALE_SECONDS, WidgetState
-from btc15_widget.windows import floor_window
+from btc15_widget.windows import MARKET_SLUG, floor_window
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 30, 9, 20, tzinfo=UTC)  # live window starts 09:15Z
@@ -95,12 +95,39 @@ def test_gap_value():
     assert s.gap(NOW) == pytest.approx(5.0)  # live open is 100.0
 
 
+def live_tick(price, start=None):
+    slug = MARKET_SLUG.format(start or floor_window(NOW))
+    return LiveTick(slug, price, price - 0.01, price + 0.01, price, 1.0)
+
+
 def test_staleness_flags():
     s = state_with()
     assert s.is_stale("tick", NOW) and s.is_stale("quotes", NOW)
-    s.apply_tick(LiveTick("s", 0.6, 0.59, 0.61, 0.6, 1.0), NOW - timedelta(seconds=3))
+    s.apply_tick(live_tick(0.6), NOW - timedelta(seconds=3))
     assert not s.is_stale("tick", NOW)
     assert s.is_stale("tick", NOW + timedelta(seconds=30))
+
+
+def test_live_tick_ignores_other_windows_ticks():
+    s = state_with()
+    s.apply_tick(live_tick(0.62), NOW)
+    s.apply_tick(live_tick(0.50, floor_window(NOW) + STEP), NOW)  # next window's market, arrives last
+    assert s.live_tick(NOW).up_price == 0.62
+    later = NOW + timedelta(minutes=12)  # 09:32Z: the 09:30 window is now live
+    assert s.live_tick(later).up_price == 0.50
+
+
+def test_tick_for_a_different_window_is_not_a_fresh_live_tick():
+    s = state_with()
+    s.apply_tick(live_tick(0.50, floor_window(NOW) + STEP), NOW)
+    assert s.live_tick(NOW) is None and s.is_stale("tick", NOW)
+
+
+def test_old_ticks_are_pruned():
+    s = state_with()
+    s.apply_tick(live_tick(0.6), NOW)
+    s.apply_tick(live_tick(0.7), NOW + timedelta(hours=2))
+    assert len(s.ticks) == 1
 
 
 def test_needs_refresh_rules():

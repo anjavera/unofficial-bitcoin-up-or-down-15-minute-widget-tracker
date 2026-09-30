@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from btc15_widget.calibration import Calibration
 from btc15_widget.model import LiveTick, Window
 from btc15_widget.proxy import apply_bias, composite
-from btc15_widget.windows import floor_window
+from btc15_widget.windows import MARKET_SLUG, floor_window
 
 STALE_SECONDS = 10
 STRIP_WINDOWS = 96
@@ -14,13 +14,14 @@ MIN_CALIBRATION_SAMPLES = 8
 RETRY_UNSETTLED_AFTER = 20  # seconds between reloads while a past window is unsettled
 REFRESH_EVERY = 300  # seconds between reloads of a complete history
 STEP = timedelta(minutes=15)
+TICK_KEEP = timedelta(hours=1)
 
 
 @dataclass
 class WidgetState:
     windows: list[Window] = field(default_factory=list)
-    tick: LiveTick | None = None
-    tick_at: datetime | None = None
+    ticks: dict[str, LiveTick] = field(default_factory=dict)  # latest tick per market slug
+    ticks_at: dict[str, datetime] = field(default_factory=dict)
     quotes: dict[str, float | None] = field(default_factory=dict)
     quotes_at: datetime | None = None
     calibration: Calibration | None = None
@@ -32,7 +33,13 @@ class WidgetState:
         self.windows, self.history_at = windows, now
 
     def apply_tick(self, tick: LiveTick, now: datetime) -> None:
-        self.tick, self.tick_at = tick, now
+        """The feed follows several windows at once, so ticks are kept per market slug."""
+        self.ticks[tick.slug], self.ticks_at[tick.slug] = tick, now
+        for slug in [k for k, at in self.ticks_at.items() if now - at > TICK_KEEP]:
+            del self.ticks[slug], self.ticks_at[slug]
+
+    def live_tick(self, now: datetime) -> LiveTick | None:
+        return self.ticks.get(MARKET_SLUG.format(floor_window(now)))
 
     def apply_quotes(self, quotes: dict[str, float | None], now: datetime) -> None:
         self.quotes, self.quotes_at = quotes, now
@@ -52,7 +59,7 @@ class WidgetState:
         return self._by_start().get(start) or Window(start=start, open=None, close=None)
 
     def is_stale(self, kind: str, now: datetime) -> bool:
-        at = self.tick_at if kind == "tick" else self.quotes_at
+        at = self.ticks_at.get(MARKET_SLUG.format(floor_window(now))) if kind == "tick" else self.quotes_at
         return at is None or (now - at).total_seconds() > STALE_SECONDS
 
     def proxy_price(self, now: datetime) -> float | None:
