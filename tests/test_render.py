@@ -37,7 +37,7 @@ def test_first_prefix_is_eastern_time():
     assert render_strip(windows(), "dark").plain.startswith("09-29 09:00 ")
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("theme", ["dark"])
 def test_settled_cell_uses_result_fg_and_net_bg(theme):
     ws = windows()
     ws[0] = Window(T0, open=100.0, close=150.0)       # UP, net +50

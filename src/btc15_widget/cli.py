@@ -13,7 +13,6 @@ from btc15_widget.client import get_client
 from btc15_widget.history import HISTORY_CACHE, load_history
 from btc15_widget.model import Window
 from btc15_widget.render import build_table, print_table  # noqa: F401  (re-exported for callers and tests)
-from btc15_widget.theme import load_theme_setting, resolve_theme
 
 
 
@@ -140,7 +139,7 @@ def cmd_btc15(client, args):
     windows = load_history(client, datetime.now(timezone.utc), hours=args.hours, cache_path=HISTORY_CACHE)
     if args.json:
         return windows_to_json(windows)
-    print_table(windows, resolve_theme(load_theme_setting()))
+    print_table(windows)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -161,7 +160,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("widget", help="live terminal widget for the BTC 15-minute markets")
     p.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
-    p.add_argument("--theme", choices=["dark", "light", "system"])
 
     p = sub.add_parser("btc15", help="recent BTC 15-minute Up/Down windows")
     p.add_argument("--hours", type=float, default=6)
@@ -186,7 +184,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "widget":  # needs no API client up front: the widget reports credential problems itself
         from btc15_widget import app
 
-        app.main((["--snapshot"] if args.snapshot else []) + (["--theme", args.theme] if args.theme else []))
+        app.main(["--snapshot"] if args.snapshot else [])
         return
     client = None
     try:

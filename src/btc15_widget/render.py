@@ -134,7 +134,7 @@ def render_status(state: WidgetState, now: datetime, theme: str) -> Text:
 
 # ---- table (shared by `pm btc15` and the live widget) ---------------------------------------------
 COLUMN_WIDTHS = {"Window (ET)": 19, "Open": 12, "Close": 14, "Chg $": 11, "Chg %": 10, "Result": 7, "Volume": 11}
-ZEBRA = {"dark": "#e6edf3 on #161b22", "light": "#1f2328 on #eef1f5"}  # own text colour: readable on any terminal
+ZEBRA = {"dark": "#e6edf3 on #161b22"}  # own text colour: readable whatever the terminal's own colours
 VOLUME_MIN_TERMINAL_WIDTH = 92
 
 

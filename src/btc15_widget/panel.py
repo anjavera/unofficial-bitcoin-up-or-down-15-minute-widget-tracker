@@ -61,8 +61,7 @@ def coin_cells(elapsed: float) -> list[list[tuple[str, str]]]:
 def render_coin(remaining: float, lean: str | None, theme: str) -> Text:
     """The coin as styled text; `lean` is "UP", "DOWN" or None (no price yet)."""
     elapsed = 1 - min(max(remaining, 0.0), WINDOW_SECONDS) / WINDOW_SECONDS
-    dark = theme == "dark"
-    ink = "#ffffff" if dark else "#1f2328"  # white on a dark terminal; a white B would vanish on a light one
+    ink = "#ffffff"
     styles = {
         "space": Style(),
         "b": Style(color=ink, bold=True),

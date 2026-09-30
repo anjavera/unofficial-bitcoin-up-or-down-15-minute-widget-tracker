@@ -44,7 +44,7 @@ def test_band_edges_match_spec():
     assert BAND_EDGES == (10, 25, 50, 100, 200, 300, 400, 500, 1000)
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("theme", ["dark"])
 def test_sign_picks_hue(theme):
     for net in MIDPOINTS:
         r, g, b = rgb(net_color(net, theme))
@@ -54,21 +54,21 @@ def test_sign_picks_hue(theme):
     assert rgb(net_color(0, theme))[2] > rgb(net_color(0, theme))[0]  # zero counts as positive (blue)
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("theme", ["dark"])
 @pytest.mark.parametrize("sign", [1, -1])
 def test_intensity_increases_with_band(theme, sign):
     sats = [saturation(net_color(sign * n, theme)) for n in MIDPOINTS]
     assert sats == sorted(sats) and len(set(sats)) == 9
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("theme", ["dark"])
 @pytest.mark.parametrize("sign", [1, -1])
 def test_every_step_stays_visible_on_background(theme, sign):
     for n in MIDPOINTS:
         assert contrast(net_color(sign * n, theme), BG[theme]) >= 1.3
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("theme", ["dark"])
 def test_result_colors(theme):
     r, g, b = rgb(result_color("UP", theme))
     assert g > r and g > b
@@ -81,15 +81,22 @@ def test_unknown_result_raises():
         result_color("FLAT", "dark")
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("theme", ["dark"])
 @pytest.mark.parametrize("net", [0, 5, 37, 150, 450, 750, -5, -37, -150, -450, -750])
 def test_text_on_net_color_is_readable(theme, net):
     bg = net_color(net, theme)
     assert contrast(text_on(bg), bg) >= 4.5
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("theme", ["dark"])
 @pytest.mark.parametrize("result", ["UP", "DOWN"])
 def test_text_on_result_color_is_readable(theme, result):
     bg = result_color(result, theme)
     assert contrast(text_on(bg), bg) >= 3.0
+
+
+def test_the_light_palette_is_gone():
+    with pytest.raises(ValueError):
+        net_color(50, "light")
+    with pytest.raises(ValueError):
+        result_color("UP", "light")

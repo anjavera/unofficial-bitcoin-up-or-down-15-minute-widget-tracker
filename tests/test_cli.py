@@ -72,7 +72,7 @@ def test_table_is_a_grid_with_the_expected_columns():
 
 
 def test_change_cells_are_filled_with_the_net_gradient():
-    for theme in ("dark", "light"):
+    for theme in ("dark",):
         table = styled_table(theme)
         for name in ("Chg $", "Chg %"):
             up, down = cells(table, name)[0], cells(table, name)[1]
@@ -97,7 +97,7 @@ def test_unsettled_and_gap_rows_have_no_gradient():
     assert "gap" in cells(table, "Window (ET)")[2].plain or "gap" in "".join(c.plain for c in cells(table, "Result"))
 
 
-@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("theme", ["dark"])
 def test_striped_rows_set_their_own_text_colour(theme):
     from rich.style import Style
 

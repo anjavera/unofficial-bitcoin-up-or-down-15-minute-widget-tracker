@@ -37,9 +37,8 @@ access is by licence enquiry. **Decision (owner): no paid data sources for now, 
 - Signals row (see below).
 
 ## Theme
-User-selectable **dark / light / system** (default: system). System follows the OS setting and updates live.
-The net-change gradient and green/red result marks get a palette per theme, with the smallest step still
-readable on both backgrounds. The choice is persisted in a local config file.
+**Dark only.** Light mode (and the dark/light/system switch, `--theme` flag and config file) was dropped on
+2026-09-30 after review. Palettes stay behind a `theme` argument, so another theme could be added later.
 
 ## Architecture
 1. `core` (no UI): history cache, Polymarket WebSocket client, proxy price aggregator, colour banding.
@@ -55,7 +54,7 @@ Unit tests: colour-band boundaries (both signs, cap), slug/window generation acr
 boundaries, proxy composite maths, UP/DOWN rule (>=). Live parts verified against real data.
 
 ## Decisions
-- Theme: dark, light or system (above).
+- Theme: dark only (light mode dropped 2026-09-30).
 - No paid data sources for now; revisit official BRTI access only if it proves to be free.
 - This repo will absorb the existing `pm` CLI code (`client`, `cli`, `btc15`) so there is one project.
 

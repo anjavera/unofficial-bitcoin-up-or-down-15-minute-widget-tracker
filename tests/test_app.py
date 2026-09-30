@@ -46,9 +46,8 @@ def sources(clock, load=None):
     )
 
 
-def make_app(tmp_path, clock=lambda: NOW, theme="dark", load=None, src="default"):
-    (tmp_path / "config.json").write_text(json.dumps({"theme": theme}))
-    return WidgetApp(sources=sources(clock, load) if src == "default" else src, config_path=tmp_path / "config.json", clock=clock)
+def make_app(tmp_path, clock=lambda: NOW, load=None, src="default"):
+    return WidgetApp(sources=sources(clock, load) if src == "default" else src, clock=clock)
 
 
 async def until(pilot, cond, tries=100):
@@ -91,18 +90,15 @@ def test_q_quits(tmp_path):
     run(scenario())
 
 
-def test_t_cycles_theme_and_persists(tmp_path):
+def test_there_is_no_theme_key(tmp_path):
+    assert "t" not in {binding[0] for binding in WidgetApp.BINDINGS}
+
     async def scenario():
-        app = make_app(tmp_path, theme="dark")
+        app = make_app(tmp_path)
         async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.press("t")  # does nothing, and certainly does not crash
             await pilot.pause(0.1)
-            saved = lambda: json.loads((tmp_path / "config.json").read_text())["theme"]
-            await pilot.press("t")
-            assert saved() == "light" and app.theme_resolved == "light"
-            await pilot.press("t")
-            assert saved() == "system"
-            await pilot.press("t")
-            assert saved() == "dark" and app.theme_resolved == "dark"
+            assert not (tmp_path / "config.json").exists()
 
     run(scenario())
 
@@ -373,10 +369,45 @@ def test_scrollbar_is_attached_to_the_table(tmp_path):
         app = make_app(tmp_path)
         async with app.run_test(size=(130, 50)) as pilot:
             assert await until(pilot, lambda: app.state.windows and app.query_one("#body").max_scroll_y > 0, tries=60)
+            assert await until(pilot, lambda: app.query_one("#body").is_vertical_scroll_end, tries=60)
             app.refresh_view()
             table_width = max(len(line) for line in app.last_paint["thead"].split("\n"))  # the grid's real width
             body = app.query_one("#body")
             gap = body.region.width - body.scrollbar_size_vertical - table_width
             assert gap == 0, f"{gap} columns between the table's right edge and its scrollbar"
+
+
+    run(scenario())
+
+
+def test_scrollbar_spans_the_whole_table_top_to_bottom(tmp_path):
+    async def scenario():
+        app = make_app(tmp_path)
+        async with app.run_test(size=(130, 50)) as pilot:
+            assert await until(pilot, lambda: app.state.windows and app.query_one("#body").max_scroll_y > 0, tries=60)
+            assert await until(pilot, lambda: app.query_one("#body").is_vertical_scroll_end, tries=60)
+            body, thead, table = app.query_one("#body"), app.query_one("#thead"), app.query_one("#table")
+            assert thead.region.y == body.region.y, "the scrollbar must start at the table's top border"
+            assert thead.region.height == 3
+            assert table.region.bottom == body.region.bottom, "and end at the table's bottom border"
+            body.scroll_home(animate=False)
+            await pilot.pause(0.2)
+            assert thead.region.y == body.region.y  # the column names stay put while rows scroll under them
+
+    run(scenario())
+
+
+def test_coin_is_centred_in_the_space_right_of_the_table(tmp_path):
+    async def scenario():
+        app = make_app(tmp_path)
+        async with app.run_test(size=(130, 50)) as pilot:
+            assert await until(pilot, lambda: app.state.windows and app.state.quotes)
+            app.refresh_view()
+            await pilot.pause(0.2)
+            body, coin, main = app.query_one("#body"), app.query_one("#coin"), app.query_one("#main")
+            free_middle = (body.region.right + 130) / 2
+            assert abs(coin.region.x + coin.region.width / 2 - free_middle) <= 1, "coin is not centred horizontally"
+            main_middle = main.region.y + main.region.height / 2
+            assert abs(coin.region.y + coin.region.height / 2 - main_middle) <= 1, "coin is not centred vertically"
 
     run(scenario())

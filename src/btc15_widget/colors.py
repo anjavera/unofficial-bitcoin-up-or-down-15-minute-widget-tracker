@@ -2,14 +2,13 @@
 
 BAND_EDGES = (10, 25, 50, 100, 200, 300, 400, 500, 1000)
 STEPS = len(BAND_EDGES)
-BACKGROUND = {"dark": "#0e1117", "light": "#ffffff"}
+BACKGROUND = {"dark": "#0e1117"}
 
-# (pale end, saturated end) per theme; steps are linear RGB interpolations
-_BLUE = {"dark": ("#cfe3ff", "#1f5fd6"), "light": ("#c2d8ff", "#0b3c9c")}
-_ORANGE = {"dark": ("#ffe0c2", "#e0620d"), "light": ("#ffd2a8", "#a84300")}
+# (pale end, saturated end); steps are linear RGB interpolations. Only the dark palette exists (light mode was dropped).
+_BLUE = {"dark": ("#cfe3ff", "#1f5fd6")}
+_ORANGE = {"dark": ("#ffe0c2", "#e0620d")}
 _RESULT = {
     "dark": {"UP": "#2ecc71", "DOWN": "#ff5252"},
-    "light": {"UP": "#1e8e3e", "DOWN": "#d93025"},
 }
 
 
@@ -31,6 +30,8 @@ def _lerp(start: str, end: str, step: int) -> str:
 
 def net_color(net: float, theme: str) -> str:
     """Blue for net >= 0, orange for net < 0; intensity grows with the band."""
+    if theme not in _BLUE:
+        raise ValueError(f"unknown theme {theme!r}; available: {sorted(_BLUE)}")
     pale, deep = (_BLUE if net >= 0 else _ORANGE)[theme]
     return _lerp(pale, deep, band_index(net))
 

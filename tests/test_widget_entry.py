@@ -39,7 +39,7 @@ def fake_sources():
 
 
 def run_main(argv, tmp_path, sources=None):
-    app_module.main(argv, sources=sources, config_path=tmp_path / "config.json", clock=lambda: NOW)
+    app_module.main(argv, sources=sources, clock=lambda: NOW)
 
 
 def test_main_snapshot_prints_and_exits(tmp_path, capsys):
@@ -49,9 +49,10 @@ def test_main_snapshot_prints_and_exits(tmp_path, capsys):
     assert "Up 0.62" in out and "net up" in out and "Signals: off" in out
 
 
-def test_theme_flag_persists(tmp_path, capsys):
-    run_main(["--snapshot", "--theme", "light"], tmp_path, fake_sources())
-    assert json.loads((tmp_path / "config.json").read_text()) == {"theme": "light"}
+def test_theme_option_is_gone(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        run_main(["--snapshot", "--theme", "light"], tmp_path, fake_sources())
+    assert not (tmp_path / "config.json").exists()
 
 
 def test_missing_credentials_message(tmp_path, capsys, monkeypatch):
@@ -73,5 +74,10 @@ def test_pm_widget_delegates_without_needing_a_client(monkeypatch):
     seen = []
     monkeypatch.setattr(app_module, "main", lambda argv=None, **kw: seen.append(argv))
     monkeypatch.setattr(cli, "get_client", lambda: (_ for _ in ()).throw(AssertionError("widget must not build a client")))
-    cli.main(["widget", "--snapshot", "--theme", "dark"])
-    assert seen == [["--snapshot", "--theme", "dark"]]
+    cli.main(["widget", "--snapshot"])
+    assert seen == [["--snapshot"]]
+
+
+def test_pm_widget_has_no_theme_option():
+    with pytest.raises(SystemExit):
+        cli.build_parser().parse_args(["widget", "--theme", "dark"])

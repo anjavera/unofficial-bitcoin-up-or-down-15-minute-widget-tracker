@@ -7,7 +7,6 @@ import sys
 import threading
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from rich.console import Console
 from rich.text import Text
@@ -21,12 +20,11 @@ from btc15_widget.render import build_table, render_header, render_legend, rende
 from btc15_widget.sources import CALIBRATION_EVERY, QUOTES_EVERY, DataSources, default_sources, run_calibration
 from btc15_widget.state import WidgetState
 from btc15_widget.windows import floor_window, seconds_remaining
-from btc15_widget.theme import DEFAULT_CONFIG_PATH, THEMES, load_theme_setting, resolve_theme, save_theme_setting
 
 MIN_WIDTH, MIN_HEIGHT = 80, 16  # the widest text block is 80 columns; the stack is about 15 rows
 TOO_SMALL = f"Terminal too small (need {MIN_WIDTH}x{MIN_HEIGHT})"
-FOREGROUND = {"dark": "#e6edf3", "light": "#1f2328"}
-SYSTEM_THEME_RECHECK = 30  # seconds between re-reading the OS theme while set to "system"
+THEME = "dark"  # the only palette (light mode was dropped)
+FOREGROUND = "#e6edf3"
 RETRY_FAILED_LOAD_AFTER = timedelta(seconds=30)
 
 
@@ -58,28 +56,24 @@ def snapshot_text(state: WidgetState, now: datetime, theme: str, view: str = "ta
 
 class WidgetApp(App):
     CSS = """
-    #top { dock: top; height: auto; }
-    #header { height: auto; margin-bottom: 1; }
-    #thead { height: auto; }
+    #header { dock: top; height: auto; margin-bottom: 1; }
+    #thead { dock: top; height: auto; }
+    #table { margin-top: 3; }
     #bottom { dock: bottom; height: auto; }
     #legend { height: auto; margin-top: 1; }
     #status { height: auto; }
     #main { height: 1fr; }
     #body { width: 82; max-width: 100%; }
     #body Static { height: auto; }
-    #side { width: 31; height: 1fr; margin-left: 2; align: center middle; }
+    #side { width: 1fr; height: 1fr; align: center middle; }
     #coin { width: 31; height: auto; }
     """
-    BINDINGS = [("q", "quit", "Quit"), ("t", "cycle_theme", "Theme"), ("v", "toggle_view", "Table/strip"),
-                ("r", "refresh_data", "Refresh")]
+    BINDINGS = [("q", "quit", "Quit"), ("v", "toggle_view", "Table/strip"), ("r", "refresh_data", "Refresh")]
 
-    def __init__(self, sources: DataSources | None = None, config_path: Path = DEFAULT_CONFIG_PATH,
-                 clock: Callable[[], datetime] = utcnow) -> None:
+    def __init__(self, sources: DataSources | None = None, clock: Callable[[], datetime] = utcnow) -> None:
         super().__init__()
-        self._sources, self._config_path, self.clock = sources, Path(config_path), clock
+        self._sources, self.clock = sources, clock
         self.state = WidgetState()
-        self.setting = load_theme_setting(self._config_path)
-        self.theme_resolved = resolve_theme(self.setting)
         self.view = "table"
         self._painted: dict = {}
         self._stop = threading.Event()
@@ -87,7 +81,6 @@ class WidgetApp(App):
         self._loading = False
         self._retry_history_at: datetime | None = None
         self._last_calibration: datetime | None = None
-        self._last_theme_check = 0.0
 
     @property
     def last_paint(self) -> dict[str, str]:
@@ -95,11 +88,10 @@ class WidgetApp(App):
         return {name: _plain(content, self.size.width) for name, content in self._painted.items()}
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="top"):
-            yield Static(id="header")
-            yield Static(id="thead")  # column names, pinned above the scrolling rows
+        yield Static(id="header")
         with Horizontal(id="main"):
             with VerticalScroll(id="body"):
+                yield Static(id="thead")  # column names: docked inside the scroll area, so they stay put and the scrollbar spans the whole table
                 yield Static(id="table")
                 yield Static(id="strip")
             with Vertical(id="side"):  # the ASCII coin / analog countdown, shown only when there is room
@@ -203,9 +195,6 @@ class WidgetApp(App):
         now = self.clock()
         if self._sources is not None and self.state.needs_history_refresh(now):
             self._start_history_load()
-        if self.setting == "system" and now.timestamp() - self._last_theme_check > SYSTEM_THEME_RECHECK:
-            self._last_theme_check = now.timestamp()
-            self.theme_resolved = resolve_theme("system")
         self.refresh_view()
 
     def _feed_status(self, now: datetime) -> str:
@@ -216,7 +205,7 @@ class WidgetApp(App):
         return "reconnecting" if self.state.is_stale("tick", now) else "live"
 
     def refresh_view(self) -> None:
-        now, theme = self.clock(), self.theme_resolved
+        now, theme = self.clock(), THEME
         self.state.feed_status = self._feed_status(now)
         width, height = self.size
         if width < MIN_WIDTH or height < MIN_HEIGHT:
@@ -250,7 +239,7 @@ class WidgetApp(App):
             self.call_after_refresh(body.scroll_end, animate=False)
         self._painted = texts
         self.screen.styles.background = BACKGROUND[theme]
-        self.screen.styles.color = FOREGROUND[theme]
+        self.screen.styles.color = FOREGROUND
 
     def _coin(self, now: datetime, theme: str):
         gap = self.state.gap(now)
@@ -258,12 +247,6 @@ class WidgetApp(App):
         return render_coin(seconds_remaining(now, floor_window(now)), lean, theme)
 
     # ---- actions ---------------------------------------------------------------------------
-    def action_cycle_theme(self) -> None:
-        self.setting = THEMES[(THEMES.index(self.setting) + 1) % len(THEMES)]
-        save_theme_setting(self._config_path, self.setting)
-        self.theme_resolved = resolve_theme(self.setting)
-        self.refresh_view()
-
     def action_toggle_view(self) -> None:
         self.view = "strip" if self.view == "table" else "table"
         self.refresh_view()
@@ -295,29 +278,26 @@ async def _collect_tick(sources: DataSources, state: WidgetState, clock: Callabl
     await asyncio.wait({task}, timeout=2)
 
 
-def _print_snapshot(sources: DataSources, config_path: Path, clock: Callable[[], datetime]) -> None:
+def _print_snapshot(sources: DataSources, clock: Callable[[], datetime]) -> None:
     state, now = WidgetState(), clock()
     state.set_history(sources.load_history(now), now)
     state.apply_quotes(sources.fetch_quotes(), clock())
     run_calibration(state, sources, now)
     asyncio.run(_collect_tick(sources, state, clock))
     state.feed_status = "live" if state.live_tick(clock()) else "no live tick"
-    print(snapshot_text(state, clock(), resolve_theme(load_theme_setting(config_path))))
+    print(snapshot_text(state, clock(), THEME))
 
 
 def main(argv: list[str] | None = None, sources: DataSources | None = None,
-         config_path: Path = DEFAULT_CONFIG_PATH, clock: Callable[[], datetime] = utcnow) -> None:
+         clock: Callable[[], datetime] = utcnow) -> None:
     parser = argparse.ArgumentParser(prog="btc15-widget", description="Live BTC 15-minute Up/Down terminal widget")
     parser.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
-    parser.add_argument("--theme", choices=THEMES, help="set and save the theme")
     args = parser.parse_args(argv)
-    if args.theme:
-        save_theme_setting(Path(config_path), args.theme)
     if not args.snapshot:
-        WidgetApp(sources=sources, config_path=config_path, clock=clock).run()
+        WidgetApp(sources=sources, clock=clock).run()
         return
     try:
-        _print_snapshot(sources or default_sources(), Path(config_path), clock)
+        _print_snapshot(sources or default_sources(), clock)
     except Exception as e:
         print(f"Error: {str(e)[:300]}", file=sys.stderr)
         sys.exit(1)

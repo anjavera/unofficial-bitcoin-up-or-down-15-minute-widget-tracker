@@ -104,15 +104,6 @@ def test_render_coin_clamps_out_of_range_time():
     assert render_coin(99999, "UP", "dark").plain == render_coin(900, "UP", "dark").plain
 
 
-def test_light_theme_keeps_the_b_visible_on_a_white_background():
-    from rich.console import Console
-
-    text = render_coin(450, "UP", "light")
-    r, c = cells_of(coin_cells(0.5), "b")[0]
-    offset = sum(len(line) + 1 for line in text.plain.split("\n")[:r]) + c
-    assert hex_color(text.get_style_at_offset(Console(), offset)) != "#ffffff"
-
-
 @pytest.mark.parametrize("width, height, shown", [(200, 50, True), (116, 28, True), (115, 50, False), (200, 27, False), (80, 24, False)])
 def test_panel_layout_needs_room_beside_the_table(width, height, shown):
     assert panel_layout(width, height) is shown
