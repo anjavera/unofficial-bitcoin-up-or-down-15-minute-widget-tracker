@@ -67,3 +67,79 @@ def test_legend_lists_all_bands():
     for edge in ("10", "25", "50", "100", "200", "300", "400", "500", "1000"):
         assert edge in plain
     assert "UP" in plain and "DOWN" in plain
+
+
+# ---- header and status -------------------------------------------------------------------------
+from btc15_widget.calibration import Calibration
+from btc15_widget.model import LiveTick
+from btc15_widget.render import render_header, render_status
+from btc15_widget.state import WidgetState
+from btc15_widget.windows import MARKET_SLUG, floor_window
+
+NOW = datetime(2026, 9, 30, 9, 20, tzinfo=UTC)  # live window starts 09:15Z
+LIVE = floor_window(NOW)
+
+
+def full_state(open_=83874.16, quote=83874.95, quote_age=0, tick_age=0, calibrated=True):
+    s = WidgetState()
+    s.set_history([Window(LIVE, open=open_, close=None, status="OPEN")], NOW)
+    if quote is not None:
+        s.apply_quotes({"a": quote}, NOW - timedelta(seconds=quote_age))
+    s.apply_tick(LiveTick(MARKET_SLUG.format(LIVE), 0.62, 0.61, 0.62, 0.62, 10.0), NOW - timedelta(seconds=tick_age))
+    if calibrated:
+        s.calibration = Calibration(n=3, bias=-4.0, mean_abs_error=4.5, max_abs_error=9.0)  # n<8: bias not applied
+    s.feed_status = "live"
+    return s
+
+
+def header(state, now=NOW, theme="dark"):
+    return render_header(state, now, theme).plain
+
+
+def test_header_full():
+    out = header(full_state())
+    for piece in ("≈ $83,874.95", "(±$4.5)", "beat $83,874.16", "gap +$0.79 (UP)", "ends in 10:00",
+                  "Up 0.62  Down 0.38", "spread 0.01", "provisional"):
+        assert piece in out, piece
+
+
+def test_header_down_gap_sign():
+    assert "gap -$12.16 (DOWN)" in header(full_state(quote=83862.00))
+
+
+def test_provisional_block_uses_gap_colours():
+    text = render_header(full_state(quote=83862.00), NOW, "dark")
+    offset = text.plain.index("▌")
+    style = text.get_style_at_offset(Console(), offset)
+    assert hex_of(style.color) == result_color("DOWN", "dark") and hex_of(style.bgcolor) == net_color(-12.16, "dark")
+
+
+def test_header_no_open_shows_dash():
+    out = header(full_state(open_=None))
+    assert "beat —" in out and "gap —" in out and "None" not in out
+
+
+def test_header_no_proxy_shows_dash():
+    out = header(full_state(quote=None))
+    assert "≈ —" in out and "gap —" in out and "None" not in out
+
+
+def test_stale_data_is_labelled_not_shown():
+    out = header(full_state(quote_age=15, tick_age=30))
+    assert "≈ stale" in out and "83,874.95" not in out
+    assert "Up stale" in out and "0.62" not in out
+
+
+def test_countdown_format():
+    s = full_state()
+    assert "ends in 10:00" in header(s, NOW)
+    assert "ends in 00:01" in header(s, datetime(2026, 9, 30, 9, 29, 59, tzinfo=UTC))
+    assert "ends in 15:00" in header(s, datetime(2026, 9, 30, 9, 30, tzinfo=UTC))  # the next window has begun
+
+
+def test_status_shows_feed_error_and_signals_off():
+    s = full_state(quote_age=2)
+    s.error = "Missing credentials"
+    out = render_status(s, NOW, "dark").plain
+    assert "feed: live" in out and "quotes 2s ago" in out
+    assert "Signals: off" in out and "Error: Missing credentials" in out
