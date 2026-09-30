@@ -17,6 +17,7 @@ dev = ["pytest>=8"]
 btc15-record = "btc15_widget.recorder:main"
 btc15-summarize = "btc15_widget.summarize:main"
 pm = "btc15_widget.cli:main"
+btc15-widget = "btc15_widget.app:main"
 
 [build-system]
 requires = ["uv_build>=0.8,<0.13"]

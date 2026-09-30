@@ -7,7 +7,7 @@ a live BTC price and a countdown.
 > **Unofficial.** Not affiliated with, endorsed by, or connected to Polymarket or CF Benchmarks.
 > Read-only market data. Nothing here places orders, and nothing here is financial advice.
 
-**Status:** core library and `pm` CLI implemented (history, live feed, price proxy, colour bands, themes); widgets not started. See
+**Status:** core library, `pm` CLI and the terminal widget implemented; desktop window and shortcut not started. See
 [`docs/superpowers/specs/2026-09-30-btc15-widget-design.md`](docs/superpowers/specs/2026-09-30-btc15-widget-design.md).
 
 ## Credentials
@@ -20,7 +20,13 @@ Polymarket US API keys are read from a local `.env` (`POLYMARKET_KEY_ID`, `POLYM
 ```
 uv sync
 uv run pm btc15 --hours 6     # last 6 hours of windows
+uv run btc15-widget           # live terminal widget (q quit, t theme, r refresh)
+uv run btc15-widget --snapshot  # print one plain-text frame and exit
 uv run pytest                 # tests
 ```
 
 Commands: see `CLAUDE.md`. Plans: `docs/superpowers/plans/`.
+
+First run fetches 24 hours of history (a few minutes); later runs reuse a local cache and start in seconds.
+The live price is an exchange-composite estimate (≈), not CF Benchmarks BRTI. Windows are coloured from real
+settled BRTI; the live window is provisional.

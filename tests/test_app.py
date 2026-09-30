@@ -209,3 +209,26 @@ def test_r_key_retries_immediately_even_during_backoff(tmp_path):
             assert await until(pilot, lambda: len(calls) == 2, tries=60)
 
     run(scenario())
+
+
+def test_status_shows_loading_until_history_arrives(tmp_path):
+    import threading
+
+    release = threading.Event()
+
+    def slow(now):
+        release.wait(10)
+        return history()
+
+    async def scenario():
+        app = make_app(tmp_path, load=slow)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause(0.3)
+            app.refresh_view()
+            assert "loading" in app.last_paint["status"]
+            release.set()
+            assert await until(pilot, lambda: app.state.windows)
+            app.refresh_view()
+            assert "loading" not in app.last_paint["status"]
+
+    run(scenario())

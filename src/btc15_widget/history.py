@@ -30,7 +30,7 @@ def _price(d) -> float | None:
         return None
 
 
-def fetch_window(client, start: datetime, sleep=time.sleep, tries: int = 4) -> Window:
+def fetch_window(client, start: datetime, sleep=time.sleep, tries: int = 4, with_volume: bool = True) -> Window:
     """One window from the API. Never raises: a failure becomes a gap with `error` set."""
     try:
         event = with_retry(lambda: client.events.retrieve_by_slug(event_slug(start)), tries, sleep)["event"]
@@ -44,6 +44,8 @@ def fetch_window(client, start: datetime, sleep=time.sleep, tries: int = 4) -> W
         )
     except Exception as e:
         return Window(start=start, open=None, close=None, error=str(e)[:60] or type(e).__name__)
+    if not with_volume:
+        return window
     try:
         data = with_retry(lambda: client.markets.bbo(market["slug"]), tries, sleep)["marketData"]
         window.volume = float(data.get("sharesTraded") or 0)
@@ -62,7 +64,7 @@ def _read_cache(path: Path | None) -> dict[str, dict]:
 
 
 def load_history(client, now: datetime, hours: float = 24, cache_path: Path | None = None,
-                 sleep=time.sleep) -> list[Window]:
+                 sleep=time.sleep, with_volume: bool = True) -> list[Window]:
     """Windows from `hours` ago through the live one, oldest first (hours*4 + 1 entries)."""
     current = floor_window(now)
     starts = [current - timedelta(minutes=15 * i) for i in range(int(hours * 4), -1, -1)]
@@ -73,7 +75,7 @@ def load_history(client, now: datetime, hours: float = 24, cache_path: Path | No
         if cached:
             windows.append(Window(start=start, **cached))
             continue
-        window = fetch_window(client, start, sleep, tries=4 if failures < BREAKER_AFTER else 1)
+        window = fetch_window(client, start, sleep, tries=4 if failures < BREAKER_AFTER else 1, with_volume=with_volume)
         failures = failures + 1 if window.error else 0
         windows.append(window)
         if window.settled:

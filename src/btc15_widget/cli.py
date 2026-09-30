@@ -186,6 +186,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--status", choices=["active", "closed", "upcoming"], default="active")
     p.set_defaults(func=cmd_search)
 
+    p = sub.add_parser("widget", help="live terminal widget for the BTC 15-minute markets")
+    p.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
+    p.add_argument("--theme", choices=["dark", "light", "system"])
+
     p = sub.add_parser("btc15", help="recent BTC 15-minute Up/Down windows")
     p.add_argument("--hours", type=float, default=6)
     p.set_defaults(func=cmd_btc15)
@@ -206,6 +210,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    if args.command == "widget":  # needs no API client up front: the widget reports credential problems itself
+        from btc15_widget import app
+
+        app.main((["--snapshot"] if args.snapshot else []) + (["--theme", args.theme] if args.theme else []))
+        return
     client = None
     try:
         client = get_client()

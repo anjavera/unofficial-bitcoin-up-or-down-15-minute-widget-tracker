@@ -30,7 +30,7 @@ def default_sources() -> DataSources:
     """Real sources. Raises RuntimeError when Polymarket credentials are missing."""
     api = get_client()
     return DataSources(
-        load_history=lambda now: load_history(api, now, hours=24, cache_path=HISTORY_CACHE),
+        load_history=lambda now: load_history(api, now, hours=24, cache_path=HISTORY_CACHE, with_volume=False),
         fetch_quotes=fetch_quotes,
         fetch_candles=fetch_candles,
         feed_factory=lambda on_tick: LiveFeed(on_tick),

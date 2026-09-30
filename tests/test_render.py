@@ -143,3 +143,12 @@ def test_status_shows_feed_error_and_signals_off():
     out = render_status(s, NOW, "dark").plain
     assert "feed: live" in out and "quotes 2s ago" in out
     assert "Signals: off" in out and "Error: Missing credentials" in out
+
+
+def test_status_explains_the_first_load_wait():
+    s = WidgetState()
+    s.loading = True
+    out = render_status(s, NOW, "dark").plain
+    assert "loading" in out and "first run" in out
+    s.set_history([Window(LIVE, open=1.0, close=None)], NOW)
+    assert "loading" not in render_status(s, NOW, "dark").plain  # once history exists the note is gone

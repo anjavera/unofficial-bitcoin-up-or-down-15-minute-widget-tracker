@@ -28,6 +28,7 @@ class WidgetState:
     feed_status: str = "connecting"
     error: str | None = None
     history_at: datetime | None = None
+    loading: bool = False  # a history load is in progress
 
     def set_history(self, windows: list[Window], now: datetime) -> None:
         self.windows, self.history_at = windows, now

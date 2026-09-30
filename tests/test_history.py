@@ -29,7 +29,11 @@ class FakeEvents:
 
 
 class FakeMarkets:
+    def __init__(self):
+        self.calls = []
+
     def bbo(self, slug):
+        self.calls.append(slug)
         return {"marketData": {"sharesTraded": "163510.71"}}
 
 
@@ -119,3 +123,12 @@ def test_outage_does_not_stall_for_minutes():
     ws = load_history(FakeClient({}), NOW, hours=6, sleep=sleeps.append)
     assert len(ws) == 25 and all(w.error for w in ws)
     assert sum(sleeps) < 120  # circuit breaker: later windows are tried once, no backoff
+
+
+def test_volume_fetch_can_be_skipped():
+    start = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
+    c = FakeClient({event_slug(start): event(83844.30, 83760.07)})
+    w = fetch_window(c, start, sleep=nosleep, with_volume=False)
+    assert w.close == 83760.07 and w.volume is None and c.markets.calls == []
+    ws = load_history(FakeClient(settled_responses()), NOW, hours=6, sleep=nosleep, with_volume=False)
+    assert all(w.volume is None for w in ws)

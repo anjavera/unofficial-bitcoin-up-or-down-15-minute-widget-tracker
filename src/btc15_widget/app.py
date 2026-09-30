@@ -1,6 +1,8 @@
 """Terminal widget for the Polymarket US BTC Up/Down 15-minute markets (Textual)."""
 
+import argparse
 import asyncio
+import sys
 import threading
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -95,6 +97,7 @@ class WidgetApp(App):
         if self._retry_history_at and self.clock() < self._retry_history_at:
             return  # an earlier load failed; do not hammer the API
         self._loading = True
+        self.state.loading = True
         self.run_worker(self._load_history, thread=True, exit_on_error=False, group="history")
 
     def _load_history(self) -> None:
@@ -110,6 +113,7 @@ class WidgetApp(App):
             self.call_from_thread(setattr, self.state, "error", str(e)[:200] or type(e).__name__)
         finally:
             self._loading = False
+            self.state.loading = False
 
     def _maybe_calibrate(self, now: datetime) -> None:
         if self._last_calibration and (now - self._last_calibration).total_seconds() < CALIBRATION_EVERY:
@@ -177,3 +181,57 @@ class WidgetApp(App):
     def action_refresh_data(self) -> None:
         self.state.history_at = None  # forces a reload on the next second
         self._retry_history_at = None  # and overrides any failure backoff
+
+
+async def _collect_tick(sources: DataSources, state: WidgetState, clock: Callable[[], datetime], timeout: float = 5.0) -> None:
+    """Listen to the live feed until the live window's first tick arrives (or `timeout`)."""
+    got = asyncio.Event()
+
+    def on_tick(tick) -> None:
+        state.apply_tick(tick, clock())
+        if state.live_tick(clock()) is not None:
+            got.set()
+
+    feed = sources.feed_factory(on_tick)
+    if feed is None:
+        return
+    stop = asyncio.Event()
+    task = asyncio.create_task(feed.run(stop))
+    try:
+        await asyncio.wait_for(got.wait(), timeout)
+    except asyncio.TimeoutError:
+        pass
+    stop.set()
+    await asyncio.wait({task}, timeout=2)
+
+
+def _print_snapshot(sources: DataSources, config_path: Path, clock: Callable[[], datetime]) -> None:
+    state, now = WidgetState(), clock()
+    state.set_history(sources.load_history(now), now)
+    state.apply_quotes(sources.fetch_quotes(), clock())
+    run_calibration(state, sources, now)
+    asyncio.run(_collect_tick(sources, state, clock))
+    state.feed_status = "live" if state.live_tick(clock()) else "no live tick"
+    print(snapshot_text(state, clock(), resolve_theme(load_theme_setting(config_path))))
+
+
+def main(argv: list[str] | None = None, sources: DataSources | None = None,
+         config_path: Path = DEFAULT_CONFIG_PATH, clock: Callable[[], datetime] = utcnow) -> None:
+    parser = argparse.ArgumentParser(prog="btc15-widget", description="Live BTC 15-minute Up/Down terminal widget")
+    parser.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
+    parser.add_argument("--theme", choices=THEMES, help="set and save the theme")
+    args = parser.parse_args(argv)
+    if args.theme:
+        save_theme_setting(Path(config_path), args.theme)
+    if not args.snapshot:
+        WidgetApp(sources=sources, config_path=config_path, clock=clock).run()
+        return
+    try:
+        _print_snapshot(sources or default_sources(), Path(config_path), clock)
+    except Exception as e:
+        print(f"Error: {str(e)[:300]}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
