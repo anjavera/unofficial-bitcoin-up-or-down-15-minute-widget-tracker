@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from btc15_widget.calibration import Calibration, fetch_candles, measure
 from btc15_widget.client import get_client
@@ -14,6 +15,7 @@ from btc15_widget.state import WidgetState
 
 QUOTES_EVERY = 2.0  # seconds between exchange quote polls
 CALIBRATION_EVERY = 1800  # seconds between calibration runs
+WIDGET_HISTORY_CACHE = Path.home() / ".cache" / "btc15-widget" / "widget-history.json"  # no volumes; keeps the pm CLI cache intact
 CALIBRATION_HOURS = 4  # keeps the candle range under Coinbase's 300-candle cap
 
 
@@ -30,7 +32,7 @@ def default_sources() -> DataSources:
     """Real sources. Raises RuntimeError when Polymarket credentials are missing."""
     api = get_client()
     return DataSources(
-        load_history=lambda now: load_history(api, now, hours=24, cache_path=HISTORY_CACHE, with_volume=False),
+        load_history=lambda now: load_history(api, now, hours=24, cache_path=WIDGET_HISTORY_CACHE, with_volume=False),
         fetch_quotes=fetch_quotes,
         fetch_candles=fetch_candles,
         feed_factory=lambda on_tick: LiveFeed(on_tick),

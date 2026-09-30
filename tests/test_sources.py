@@ -75,3 +75,20 @@ def test_run_calibration_with_no_usable_data_returns_none():
     state.set_history(history(), NOW)
     assert run_calibration(state, fake_sources(lambda: {"a": {}}), NOW) is None
     assert state.calibration is None
+
+
+def test_widget_uses_its_own_cache_and_skips_volume(monkeypatch, tmp_path):
+    from btc15_widget import sources as sources_module
+
+    seen = {}
+
+    class FakeApi:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(sources_module, "get_client", lambda: FakeApi())
+    monkeypatch.setattr(sources_module, "load_history", lambda api, now, **kw: seen.update(kw) or [])
+    default_sources().load_history(NOW)
+    assert seen["with_volume"] is False
+    assert seen["cache_path"] == sources_module.WIDGET_HISTORY_CACHE
+    assert sources_module.WIDGET_HISTORY_CACHE != sources_module.HISTORY_CACHE  # the CLI cache keeps volumes

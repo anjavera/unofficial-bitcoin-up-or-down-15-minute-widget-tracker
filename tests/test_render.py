@@ -152,3 +152,16 @@ def test_status_explains_the_first_load_wait():
     assert "loading" in out and "first run" in out
     s.set_history([Window(LIVE, open=1.0, close=None)], NOW)
     assert "loading" not in render_status(s, NOW, "dark").plain  # once history exists the note is gone
+
+
+def test_text_blocks_fit_the_minimum_terminal_width():
+    from btc15_widget.app import MIN_WIDTH
+
+    s = full_state()
+    s.apply_quotes({"a": 100123.45}, NOW)  # widest realistic price
+    s.set_history([Window(LIVE, open=99000.12, close=None, status="OPEN")], NOW)
+    s.feed_status = "reconnecting"
+    blocks = [render_header(s, NOW, "dark"), render_legend("dark"), render_status(s, NOW, "dark")]
+    for block in blocks:
+        for line in block.plain.split("\n"):
+            assert len(line) <= MIN_WIDTH, (len(line), line)

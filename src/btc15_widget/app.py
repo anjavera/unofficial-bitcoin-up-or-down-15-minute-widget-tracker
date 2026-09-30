@@ -17,7 +17,7 @@ from btc15_widget.sources import CALIBRATION_EVERY, QUOTES_EVERY, DataSources, d
 from btc15_widget.state import WidgetState
 from btc15_widget.theme import DEFAULT_CONFIG_PATH, THEMES, load_theme_setting, resolve_theme, save_theme_setting
 
-MIN_WIDTH, MIN_HEIGHT = 40, 12
+MIN_WIDTH, MIN_HEIGHT = 80, 16  # the widest text block is 80 columns; the stack is about 15 rows
 TOO_SMALL = f"Terminal too small (need {MIN_WIDTH}x{MIN_HEIGHT})"
 FOREGROUND = {"dark": "#e6edf3", "light": "#1f2328"}
 SYSTEM_THEME_RECHECK = 30  # seconds between re-reading the OS theme while set to "system"
@@ -72,7 +72,7 @@ class WidgetApp(App):
         self.refresh_view()
         if self._sources is not None:
             self._start_history_load()
-            self.run_worker(self._poll_quotes, thread=True, exit_on_error=False, group="quotes")
+            threading.Thread(target=self._poll_quotes, daemon=True, name="btc15-quotes").start()
             self.run_worker(self._run_feed(), exit_on_error=False, group="feed")
         self.set_interval(1.0, self._on_second)
 
@@ -98,19 +98,35 @@ class WidgetApp(App):
             return  # an earlier load failed; do not hammer the API
         self._loading = True
         self.state.loading = True
-        self.run_worker(self._load_history, thread=True, exit_on_error=False, group="history")
+        # daemon thread: Textual's thread workers run in asyncio's default executor, which blocks exit
+        threading.Thread(target=self._load_history, daemon=True, name="btc15-history").start()
+
+    def _apply(self, fn, *args) -> None:
+        """Run `fn` on the UI thread; quietly give up if the app is shutting down."""
+        if self._stop.is_set():
+            return
+        try:
+            self.call_from_thread(fn, *args)
+        except Exception:
+            pass
 
     def _load_history(self) -> None:
         try:
             now = self.clock()
             windows = self._sources.load_history(now)
-            self.call_from_thread(self.state.set_history, windows, now)
-            self.call_from_thread(setattr, self.state, "error", None)
-            self._retry_history_at = None
-            self._maybe_calibrate(now)
+            self._apply(self.state.set_history, windows, now)
+            failed = [w for w in windows if w.error]
+            if windows and len(failed) * 2 > len(windows):  # load_history never raises: outages arrive as gaps
+                self._retry_history_at = self.clock() + RETRY_FAILED_LOAD_AFTER
+                message = f"history unavailable: {len(failed)} of {len(windows)} windows failed ({failed[0].error})"
+                self._apply(setattr, self.state, "error", message)
+            else:
+                self._retry_history_at = None
+                self._apply(setattr, self.state, "error", None)
+                self._maybe_calibrate(now)
         except Exception as e:
             self._retry_history_at = self.clock() + RETRY_FAILED_LOAD_AFTER
-            self.call_from_thread(setattr, self.state, "error", str(e)[:200] or type(e).__name__)
+            self._apply(setattr, self.state, "error", str(e)[:200] or type(e).__name__)
         finally:
             self._loading = False
             self.state.loading = False
@@ -125,7 +141,7 @@ class WidgetApp(App):
         while not self._stop.is_set():
             try:
                 quotes = self._sources.fetch_quotes()
-                self.call_from_thread(self.state.apply_quotes, quotes, self.clock())
+                self._apply(self.state.apply_quotes, quotes, self.clock())
             except Exception:
                 pass  # a failed poll just leaves the last quotes to go stale
             self._stop.wait(QUOTES_EVERY)

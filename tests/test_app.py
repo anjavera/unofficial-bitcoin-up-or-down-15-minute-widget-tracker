@@ -142,7 +142,7 @@ def test_too_small_terminal(tmp_path):
         async with app.run_test(size=(30, 8)) as pilot:
             await pilot.pause(0.2)
             app.refresh_view()
-            assert app.last_paint["header"] == "Terminal too small (need 40x12)"
+            assert app.last_paint["header"] == "Terminal too small (need 80x16)"
             assert app.last_paint["strip"] == "" and app.last_paint["status"] == ""
 
     run(scenario())
@@ -230,5 +230,73 @@ def test_status_shows_loading_until_history_arrives(tmp_path):
             assert await until(pilot, lambda: app.state.windows)
             app.refresh_view()
             assert "loading" not in app.last_paint["status"]
+
+    run(scenario())
+
+
+class DownClient:
+    """Stands in for the Polymarket client during an API outage (drives the REAL load_history)."""
+
+    def __init__(self):
+        self.calls = 0
+        self.events = self
+        self.markets = self
+
+    def retrieve_by_slug(self, slug):
+        self.calls += 1
+        raise RuntimeError("Error 1015: rate limited")
+
+
+def test_history_outage_shows_error_and_backs_off(tmp_path):
+    from btc15_widget.history import load_history
+
+    down = DownClient()
+
+    async def scenario():
+        app = make_app(tmp_path, load=lambda now: load_history(down, now, hours=24, sleep=lambda s: None, with_volume=False))
+        async with app.run_test(size=(100, 30)) as pilot:
+            assert await until(pilot, lambda: app.state.error)
+            app.refresh_view()
+            assert "Error:" in app.last_paint["status"] and "history" in app.last_paint["status"]
+            calls_after_first_load = down.calls
+            await pilot.pause(2.6)  # the once-a-second timer fires, but the backoff must hold
+            assert down.calls == calls_after_first_load
+
+    run(scenario())
+
+
+def test_q_quits_promptly_during_a_slow_history_load(tmp_path):
+    import threading
+    import time
+
+    release = threading.Event()
+
+    def slow(now):
+        release.wait(25)
+        return history()
+
+    async def scenario():
+        app = make_app(tmp_path, load=slow)
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause(0.3)
+            await pilot.press("q")
+            await pilot.pause(0.2)
+
+    started = time.monotonic()
+    try:
+        run(scenario())
+        assert time.monotonic() - started < 10  # must not wait for the 25 s load
+    finally:
+        release.set()
+
+
+def test_layout_fits_an_80_column_terminal(tmp_path):
+    async def scenario():
+        for size, too_small in [((80, 24), False), ((80, 16), False), ((79, 24), True), ((80, 15), True)]:
+            app = make_app(tmp_path)
+            async with app.run_test(size=size) as pilot:
+                assert await until(pilot, lambda: app.state.windows and app.state.quotes and app.state.live_tick(NOW))
+                app.refresh_view()
+                assert app.last_paint["header"].startswith("Terminal too small") == too_small, size
 
     run(scenario())

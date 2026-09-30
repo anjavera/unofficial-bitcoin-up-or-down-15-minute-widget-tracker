@@ -51,11 +51,11 @@ def _band_swatches(theme: str, sign: int) -> Text:
 
 def render_legend(theme: str) -> Text:
     text = Text()
-    text.append("Cell ▌  left half = result: ")
+    text.append("Cell ▌ left half = result: ")
     text.append("UP", style=Style(color=result_color("UP", theme)))
     text.append(" / ")
     text.append("DOWN", style=Style(color=result_color("DOWN", theme)))
-    text.append("   right half = net change ($, bands by size)\n")
+    text.append(", right half = net change ($)\n")
     text.append("net up   ")
     text.append_text(_band_swatches(theme, +1))
     text.append("\nnet down ")
@@ -96,7 +96,7 @@ def render_header(state: WidgetState, now: datetime, theme: str) -> Text:
         spread = "—" if tick.spread is None else f"{tick.spread:.2f}"
 
     text = Text()
-    text.append(f"BTC ≈ {price_text}{error}   beat {beat}   gap {gap_text}   ends in {_countdown(now, live.start)}\n")
+    text.append(f"BTC ≈ {price_text}{error}  beat {beat}  gap {gap_text}  ends in {_countdown(now, live.start)}\n")
     text.append(f"Up {up}  Down {down}  spread {spread}   ")
     text.append("provisional ", style=DIM)
     if gap is None:
@@ -109,8 +109,8 @@ def render_header(state: WidgetState, now: datetime, theme: str) -> Text:
 
 def render_status(state: WidgetState, now: datetime, theme: str) -> Text:
     age = "—" if state.quotes_at is None else f"{max(0, int((now - state.quotes_at).total_seconds()))}s ago"
-    text = Text(f"feed: {state.feed_status} · quotes {age}   ", style=DIM)
-    text.append("Signals: off (no pattern beat always-UP; see data/patterns.md)", style=DIM)
+    text = Text(f"feed: {state.feed_status} · quotes {age}  ", style=DIM)
+    text.append("Signals: off (see data/patterns.md)", style=DIM)
     if state.loading and not state.windows:
         text.append("\nloading 24h history… (first run takes a few minutes; later runs are cached)")
     if state.error:
