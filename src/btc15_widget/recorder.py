@@ -7,25 +7,18 @@ Reads POLYMARKET_KEY_ID / POLYMARKET_SECRET_KEY from the environment or a .env. 
 import argparse
 import asyncio
 import json
-import os
 import time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dotenv import find_dotenv, load_dotenv
 from polymarket_us.websocket import MarketsWebSocket
 
+from btc15_widget.client import load_credentials
 from btc15_widget.windows import window_slugs
 
 SESSION_SECONDS = 3600  # reconnect hourly so the subscribed window list stays current
 WINDOWS_AHEAD = 6
-
-
-def load_credentials() -> tuple[str, str]:
-    load_dotenv(find_dotenv(usecwd=True))
-    load_dotenv(Path.home() / "polymarket-bot" / ".env")
-    return os.environ["POLYMARKET_KEY_ID"], os.environ["POLYMARKET_SECRET_KEY"]
 
 
 def classify(message: dict) -> str:
