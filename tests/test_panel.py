@@ -1,98 +1,118 @@
-import math
-
 import pytest
-from rich.style import Style
 
 from btc15_widget.colors import result_color
-from btc15_widget.panel import dial_pixels, panel_layout, render_dial, render_logo
+from btc15_widget.panel import COIN_COLS, COIN_ROWS, coin_cells, panel_layout, render_coin
+
+ORANGE = "#f7931a"
 
 
-def kinds(grid):
-    return {k for row in grid for k in row}
+def cells_of(grid, kind):
+    return [(r, c) for r, row in enumerate(grid) for c, (_, k) in enumerate(row) if k == kind]
 
 
-def at(grid, x, y):
-    return grid[y][x]
+def hex_color(style):
+    return style.color.get_truecolor().hex
 
 
-@pytest.mark.parametrize("size", [20, 28])
-def test_dial_is_a_square_grid_with_transparent_corners(size):
-    grid = dial_pixels(450, size)
-    assert len(grid) == size and all(len(row) == size for row in grid)
-    assert at(grid, 0, 0) == "out" and at(grid, size - 1, size - 1) == "out"
+def test_coin_grid_has_fixed_size():
+    grid = coin_cells(0.25)
+    assert len(grid) == COIN_ROWS == 15 and all(len(row) == COIN_COLS == 31 for row in grid)
 
 
-def test_full_window_has_nothing_elapsed_and_the_hand_points_to_twelve():
-    grid = dial_pixels(900, 28)
-    assert "elapsed" not in kinds(grid) and "remaining" in kinds(grid)
-    hand_xs = [x for y, row in enumerate(grid) for x, k in enumerate(row) if k == "hand" and y < 12]
-    assert hand_xs and all(abs(x - 13.5) <= 1.5 for x in hand_xs)  # straight up from the centre
+def test_coin_is_a_ring_of_stars_around_a_dollar_sign_b():
+    grid = coin_cells(0.25)
+    assert {ch for row in grid for ch, k in row if k.startswith("ring") or k == "hand"} == {"*"}
+    assert {ch for row in grid for ch, k in row if k == "b"} == {"$"}
+    assert len(cells_of(grid, "b")) >= 40
+    assert all(ch == " " for row in grid for ch, k in row if k == "space")
 
 
-def test_half_window_splits_the_face_down_the_middle_with_the_hand_at_six():
-    grid = dial_pixels(450, 28)
-    c = 13
-    assert at(grid, c - 6, c) == "remaining" and at(grid, c + 6, c + 4) == "elapsed"  # left half left, right half used up
-    hand = [(x, y) for y, row in enumerate(grid) for x, k in enumerate(row) if k == "hand"]
-    assert hand and all(y >= c and abs(x - 13.5) <= 1.5 for x, y in hand)  # one revolution per window: half gone = 6 o'clock
+def test_the_b_sits_inside_the_ring_and_roughly_centred():
+    grid = coin_cells(0.25)
+    b = cells_of(grid, "b")
+    rows, cols = [r for r, _ in b], [c for _, c in b]
+    assert min(rows) > 0 and max(rows) < COIN_ROWS - 1
+    assert abs((min(cols) + max(cols)) / 2 - (COIN_COLS - 1) / 2) <= 1.5
+    assert abs((min(rows) + max(rows)) / 2 - (COIN_ROWS - 1) / 2) <= 0.5
 
 
-def test_empty_window_has_no_wedge_left():
-    assert "remaining" not in kinds(dial_pixels(0, 28))
+def test_ring_is_closed_on_every_side():
+    ring = {(r, c) for k in ("ring_left", "ring_used", "hand") for r, c in cells_of(coin_cells(0.25), k)}
+    mid = COIN_ROWS // 2
+    assert any(r == 0 for r, _ in ring) and any(r == COIN_ROWS - 1 for r, _ in ring)
+    assert any(c < 4 for r, c in ring if r == mid) and any(c > COIN_COLS - 5 for r, c in ring if r == mid)
 
 
-def test_wedge_shrinks_as_time_runs_out():
-    counts = [sum(row.count("remaining") for row in dial_pixels(s, 28)) for s in (900, 600, 300, 60)]
-    assert counts == sorted(counts, reverse=True) and counts[0] > counts[-1] > 0
+def test_nothing_used_at_the_start_and_nothing_left_at_the_end():
+    assert cells_of(coin_cells(0.0), "ring_used") == []
+    assert cells_of(coin_cells(1.0), "ring_left") == []
 
 
-def test_dial_has_a_tick_for_each_minute():
-    ticks = sum(row.count("tick") for row in dial_pixels(450, 28))
-    assert ticks >= 15
+def test_used_arc_grows_with_elapsed_time():
+    used = [len(cells_of(coin_cells(e), "ring_used")) for e in (0.1, 0.3, 0.5, 0.8)]
+    assert used == sorted(used) and used[0] < used[-1]
 
 
-def test_render_dial_shows_digital_time_and_lean_colour():
-    text = render_dial(450, "UP", "dark", 20)
-    lines = text.plain.split("\n")
-    assert len(lines) == 20 // 2 + 1 and lines[-1].strip() == "07:30"
-    used = {str(s.style.color.get_truecolor().hex) for s in text.spans if s.style.color} | {
-        str(s.style.bgcolor.get_truecolor().hex) for s in text.spans if s.style.bgcolor}
-    assert result_color("UP", "dark") in used
-    down = render_dial(450, "DOWN", "dark", 20)
-    used_down = {str(s.style.color.get_truecolor().hex) for s in down.spans if s.style.color} | {
-        str(s.style.bgcolor.get_truecolor().hex) for s in down.spans if s.style.bgcolor}
-    assert result_color("DOWN", "dark") in used_down and result_color("UP", "dark") not in used_down
+def test_half_elapsed_uses_the_right_half_of_the_ring():
+    grid = coin_cells(0.5)
+    mid = (COIN_COLS - 1) / 2
+    assert all(c >= mid - 1 for _, c in cells_of(grid, "ring_used"))  # clockwise from 12: right side first
+    assert all(c <= mid + 1 for _, c in cells_of(grid, "ring_left"))
 
 
-def test_render_dial_without_a_lean_is_neutral():
-    text = render_dial(450, None, "dark", 20)
-    colours = {str(s.style.color.get_truecolor().hex) for s in text.spans if s.style.color}
-    assert result_color("UP", "dark") not in colours and result_color("DOWN", "dark") not in colours
+def test_there_is_one_hand_moving_clockwise_from_twelve():
+    top, bottom = cells_of(coin_cells(0.0), "hand"), cells_of(coin_cells(0.5), "hand")
+    quarter = cells_of(coin_cells(0.25), "hand")
+    assert len(top) == len(bottom) == len(quarter) == 1
+    assert top[0][0] == 0 and abs(top[0][1] - 15) <= 1  # 12 o'clock
+    assert bottom[0][0] == COIN_ROWS - 1 and abs(bottom[0][1] - 15) <= 1  # 6 o'clock
+    assert quarter[0][1] > 25 and abs(quarter[0][0] - 7) <= 1  # 3 o'clock
 
 
-def test_render_dial_clamps_out_of_range_time():
-    assert render_dial(-5, "UP", "dark", 20).plain.split("\n")[-1].strip() == "00:00"
-    assert render_dial(5000, "UP", "dark", 20).plain.split("\n")[-1].strip() == "15:00"
+def test_render_coin_uses_the_requested_characters_and_colours():
+    text = render_coin(450, "UP", "dark")
+    plain_lines = text.plain.split("\n")
+    assert len(plain_lines) == COIN_ROWS and all(len(line) == COIN_COLS for line in plain_lines)
+    assert "$" in text.plain and "*" in text.plain
+    grid = coin_cells(0.5)
+    (br, bc) = cells_of(grid, "b")[0]
+    (lr, lc) = cells_of(grid, "ring_left")[0]
+    (ur, uc) = cells_of(grid, "ring_used")[0]
+    offset = lambda r, c: sum(len(line) + 1 for line in plain_lines[:r]) + c
+    style_at = lambda r, c: text.get_style_at_offset(__import__("rich.console", fromlist=["Console"]).Console(), offset(r, c))
+    assert hex_color(style_at(br, bc)) == "#ffffff"          # the B: white $
+    assert hex_color(style_at(lr, lc)) == ORANGE              # time left: orange *
+    assert hex_color(style_at(ur, uc)) == result_color("UP", "dark")  # time used: green for an UP lean
 
 
-@pytest.mark.parametrize("size", [20, 28])
-def test_logo_is_block_art_in_bitcoin_colours(size):
-    text = render_logo(size)
-    lines = text.plain.split("\n")
-    assert len(lines) == size // 2 and all(len(line) == size for line in lines)
-    colours = {str(s.style.color.get_truecolor().hex) for s in text.spans if s.style.color}
-    assert "#f7931a" in colours and "#ffffff" in colours
+def test_used_arc_shifts_to_red_for_a_down_lean_and_is_dim_without_a_lean():
+    from rich.console import Console
+
+    def used_color(lean):
+        text = render_coin(450, lean, "dark")
+        grid = coin_cells(0.5)
+        r, c = cells_of(grid, "ring_used")[0]
+        offset = sum(len(line) + 1 for line in text.plain.split("\n")[:r]) + c
+        return hex_color(text.get_style_at_offset(Console(), offset))
+
+    assert used_color("DOWN") == result_color("DOWN", "dark")
+    assert used_color(None) not in (result_color("UP", "dark"), result_color("DOWN", "dark"), ORANGE)
 
 
-def test_logo_rejects_unknown_sizes():
-    with pytest.raises(ValueError):
-        render_logo(13)
+def test_render_coin_clamps_out_of_range_time():
+    assert render_coin(-50, "UP", "dark").plain == render_coin(0, "UP", "dark").plain
+    assert render_coin(99999, "UP", "dark").plain == render_coin(900, "UP", "dark").plain
 
 
-@pytest.mark.parametrize(
-    "width, height, expected",
-    [(200, 50, (28, True)), (112, 41, (28, True)), (111, 50, (20, True)), (104, 33, (20, True)),
-     (104, 32, (20, False)), (200, 22, (20, False)), (103, 40, None), (200, 21, None), (80, 24, None)],
-)
-def test_panel_layout_fits_the_terminal(width, height, expected):
-    assert panel_layout(width, height) == expected
+def test_light_theme_keeps_the_b_visible_on_a_white_background():
+    from rich.console import Console
+
+    text = render_coin(450, "UP", "light")
+    r, c = cells_of(coin_cells(0.5), "b")[0]
+    offset = sum(len(line) + 1 for line in text.plain.split("\n")[:r]) + c
+    assert hex_color(text.get_style_at_offset(Console(), offset)) != "#ffffff"
+
+
+@pytest.mark.parametrize("width, height, shown", [(200, 50, True), (116, 28, True), (115, 50, False), (200, 27, False), (80, 24, False)])
+def test_panel_layout_needs_room_beside_the_table(width, height, shown):
+    assert panel_layout(width, height) is shown

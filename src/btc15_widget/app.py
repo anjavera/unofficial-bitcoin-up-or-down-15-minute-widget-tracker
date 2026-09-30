@@ -16,7 +16,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Static
 
 from btc15_widget.colors import BACKGROUND
-from btc15_widget.panel import panel_layout, render_dial, render_logo
+from btc15_widget.panel import panel_layout, render_coin
 from btc15_widget.render import build_table, render_header, render_legend, render_status, render_strip, split_table
 from btc15_widget.sources import CALIBRATION_EVERY, QUOTES_EVERY, DataSources, default_sources, run_calibration
 from btc15_widget.state import WidgetState
@@ -65,11 +65,10 @@ class WidgetApp(App):
     #legend { height: auto; margin-top: 1; }
     #status { height: auto; }
     #main { height: 1fr; }
-    #body { width: 1fr; max-width: 84; }
+    #body { width: 82; max-width: 100%; }
     #body Static { height: auto; }
-    #side { width: 22; height: auto; margin-left: 2; }
-    #dial { height: auto; }
-    #logo { height: auto; margin-top: 1; }
+    #side { width: 31; height: 1fr; margin-left: 2; align: center middle; }
+    #coin { width: 31; height: auto; }
     """
     BINDINGS = [("q", "quit", "Quit"), ("t", "cycle_theme", "Theme"), ("v", "toggle_view", "Table/strip"),
                 ("r", "refresh_data", "Refresh")]
@@ -103,9 +102,8 @@ class WidgetApp(App):
             with VerticalScroll(id="body"):
                 yield Static(id="table")
                 yield Static(id="strip")
-            with Vertical(id="side"):  # analog countdown and logo, shown only when the terminal is big enough
-                yield Static(id="dial")
-                yield Static(id="logo")
+            with Vertical(id="side"):  # the ASCII coin / analog countdown, shown only when there is room
+                yield Static(id="coin")
         with Vertical(id="bottom"):
             yield Static(id="legend")
             yield Static(id="status")
@@ -222,19 +220,18 @@ class WidgetApp(App):
         self.state.feed_status = self._feed_status(now)
         width, height = self.size
         if width < MIN_WIDTH or height < MIN_HEIGHT:
-            texts = {"header": TOO_SMALL, "thead": "", "table": "", "strip": "", "dial": "", "logo": "",
+            texts = {"header": TOO_SMALL, "thead": "", "table": "", "strip": "", "coin": "",
                      "legend": "", "status": ""}
-            layout = None
+            show_coin = False
         else:
-            layout = panel_layout(width, height)
+            show_coin = panel_layout(width, height)
             thead, rows = ("", "")
             if self.view == "table":
                 thead, rows = split_table(_table(self.state, now, theme))
             texts = {
                 "header": render_header(self.state, now, theme),
                 "thead": thead,
-                "dial": self._dial(now, theme, layout[0]) if layout else "",
-                "logo": render_logo(layout[0]) if layout and layout[1] else "",
+                "coin": self._coin(now, theme) if show_coin else "",
                 "table": rows,
                 "strip": render_strip(self.state.strip_windows(now), theme) if self.view == "strip" else "",
                 "legend": render_legend(theme, self.view),
@@ -245,9 +242,7 @@ class WidgetApp(App):
         for name, content in texts.items():
             self.query_one(f"#{name}", Static).update(content)
         side = self.query_one("#side")
-        side.display = layout is not None
-        if layout:
-            side.styles.width = layout[0] + 2
+        side.display = show_coin
         self.query_one("#table").display = self.view == "table"
         self.query_one("#thead").display = self.view == "table"
         self.query_one("#strip").display = self.view == "strip"
@@ -257,10 +252,10 @@ class WidgetApp(App):
         self.screen.styles.background = BACKGROUND[theme]
         self.screen.styles.color = FOREGROUND[theme]
 
-    def _dial(self, now: datetime, theme: str, size: int):
+    def _coin(self, now: datetime, theme: str):
         gap = self.state.gap(now)
         lean = None if gap is None else ("UP" if gap >= 0 else "DOWN")
-        return render_dial(seconds_remaining(now, floor_window(now)), lean, theme, size)
+        return render_coin(seconds_remaining(now, floor_window(now)), lean, theme)
 
     # ---- actions ---------------------------------------------------------------------------
     def action_cycle_theme(self) -> None:
