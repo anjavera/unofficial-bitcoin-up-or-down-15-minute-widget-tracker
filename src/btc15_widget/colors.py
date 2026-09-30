@@ -40,3 +40,18 @@ def result_color(result: str, theme: str) -> str:
         return _RESULT[theme][result]
     except KeyError:
         raise ValueError(f"unknown result {result!r} or theme {theme!r}") from None
+
+
+def _luminance(hex_color: str) -> float:
+    def lin(c: int) -> float:
+        c /= 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (lin(int(hex_color[i : i + 2], 16)) for i in (1, 3, 5))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def text_on(background: str) -> str:
+    """Black or white, whichever reads better on `background`."""
+    lum = _luminance(background)
+    return "#000000" if (lum + 0.05) / 0.05 >= 1.05 / (lum + 0.05) else "#ffffff"

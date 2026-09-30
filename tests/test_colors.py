@@ -2,7 +2,7 @@ import colorsys
 
 import pytest
 
-from btc15_widget.colors import BACKGROUND, BAND_EDGES, band_index, net_color, result_color
+from btc15_widget.colors import BACKGROUND, BAND_EDGES, band_index, net_color, result_color, text_on
 
 BG = BACKGROUND
 MIDPOINTS = [5, 17, 37, 75, 150, 250, 350, 450, 750]  # one net value inside each band
@@ -79,3 +79,17 @@ def test_result_colors(theme):
 def test_unknown_result_raises():
     with pytest.raises(ValueError):
         result_color("FLAT", "dark")
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("net", [0, 5, 37, 150, 450, 750, -5, -37, -150, -450, -750])
+def test_text_on_net_color_is_readable(theme, net):
+    bg = net_color(net, theme)
+    assert contrast(text_on(bg), bg) >= 4.5
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("result", ["UP", "DOWN"])
+def test_text_on_result_color_is_readable(theme, result):
+    bg = result_color(result, theme)
+    assert contrast(text_on(bg), bg) >= 3.0

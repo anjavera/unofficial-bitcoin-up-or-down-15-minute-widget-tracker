@@ -17,7 +17,7 @@ Run from this directory. Add `--json` before the command for machine-readable ou
     uv run pm book <market-slug> --depth 10
     uv run pm market <market-slug>
     uv run pm --json event <event-slug>
-    uv run pm btc15 [--hours 6]    # BTC 15-min Up/Down windows: open/close, result, volume
+    uv run pm btc15 [--hours 6]    # styled table: Chg $/% blue-orange gradient, Result green/red, volume
     uv run btc15-widget [--snapshot] [--theme dark|light|system]   # live terminal widget (also: uv run pm widget)
     uv run btc15-record --hours 4 --out data/live.jsonl   # record live ticks + trades
     uv run btc15-summarize data/live.jsonl
