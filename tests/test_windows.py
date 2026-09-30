@@ -23,3 +23,17 @@ def test_window_slugs_can_start_in_the_past():
     slugs = window_slugs(datetime(2026, 9, 30, 10, 0, tzinfo=UTC), 2, back=1)
     assert slugs[0] == "cpc-btc-updown-15m-2026-09-30-0945z"
     assert len(slugs) == 3
+
+
+def test_event_slug():
+    from btc15_widget.windows import event_slug
+
+    assert event_slug(datetime(2026, 9, 30, 9, 15, tzinfo=UTC)) == "btc-updown-15m-2026-09-30-0915z"
+
+
+def test_seconds_remaining_clamps_at_zero():
+    from btc15_widget.windows import seconds_remaining
+
+    start = datetime(2026, 9, 30, 9, 0, tzinfo=UTC)
+    assert seconds_remaining(datetime(2026, 9, 30, 9, 10, tzinfo=UTC), start) == 300
+    assert seconds_remaining(datetime(2026, 9, 30, 9, 20, tzinfo=UTC), start) == 0

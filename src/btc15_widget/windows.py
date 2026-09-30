@@ -16,3 +16,12 @@ def window_slugs(now: datetime, ahead: int, back: int = 0) -> list[str]:
     """Market slugs from `back` windows ago through the current window plus `ahead - 1` more."""
     start = floor_window(now)
     return [MARKET_SLUG.format(start + timedelta(minutes=15 * i)) for i in range(-back, ahead)]
+
+
+def event_slug(start: datetime) -> str:
+    return EVENT_SLUG.format(start)
+
+
+def seconds_remaining(now: datetime, start: datetime) -> float:
+    """Seconds until the window starting at `start` ends; never negative."""
+    return max(0.0, (start + timedelta(minutes=15) - now).total_seconds())
