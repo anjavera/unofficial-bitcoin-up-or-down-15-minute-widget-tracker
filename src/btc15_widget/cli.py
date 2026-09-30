@@ -7,15 +7,13 @@ import argparse
 import json
 import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from btc15_widget.client import get_client
-from btc15_widget.history import load_history
+from btc15_widget.history import HISTORY_CACHE, load_history
 from btc15_widget.model import Window
 
 ET = ZoneInfo("America/New_York")
-HISTORY_CACHE = Path.home() / ".cache" / "btc15-widget" / "history.json"
 
 
 def usd(amount) -> str:

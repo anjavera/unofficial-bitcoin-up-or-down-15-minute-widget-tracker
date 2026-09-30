@@ -8,6 +8,7 @@ from pathlib import Path
 from btc15_widget.model import Window
 from btc15_widget.windows import event_slug, floor_window
 
+HISTORY_CACHE = Path.home() / ".cache" / "btc15-widget" / "history.json"
 PAUSE_BETWEEN_FETCHES = 0.4  # stay clear of the Cloudflare 1015 rate limit
 BREAKER_AFTER = 3  # consecutive failed windows before later ones are tried once, without backoff
 
