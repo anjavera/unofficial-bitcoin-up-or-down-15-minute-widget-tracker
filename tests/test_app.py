@@ -349,3 +349,20 @@ def test_column_headers_stay_pinned_while_rows_scroll(tmp_path):
             assert not app.query_one("#thead").display  # the strip view has no column headers
 
     run(scenario())
+
+
+def test_side_panel_adapts_to_the_terminal_size(tmp_path):
+    async def scenario():
+        for size, dial, logo in [((130, 50), True, True), ((110, 30), True, False), ((100, 30), False, False)]:
+            app = make_app(tmp_path)
+            async with app.run_test(size=size) as pilot:
+                assert await until(pilot, lambda: app.state.windows and app.state.quotes and app.state.live_tick(NOW))
+                app.refresh_view()
+                paint = app.last_paint
+                assert bool(paint["dial"]) == dial and bool(paint["logo"]) == logo, size
+                if dial:
+                    assert "10:00" in paint["dial"]  # NOW is 09:20, the 09:15 window ends at 09:30
+                assert "ends in 10:00" in paint["header"]  # the text countdown stays in every layout
+                assert app.query_one("#side").display == dial
+
+    run(scenario())

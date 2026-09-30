@@ -12,14 +12,15 @@ from pathlib import Path
 from rich.console import Console
 from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.containers import Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Static
 
 from btc15_widget.colors import BACKGROUND
+from btc15_widget.panel import panel_layout, render_dial, render_logo
 from btc15_widget.render import build_table, render_header, render_legend, render_status, render_strip, split_table
 from btc15_widget.sources import CALIBRATION_EVERY, QUOTES_EVERY, DataSources, default_sources, run_calibration
 from btc15_widget.state import WidgetState
-from btc15_widget.windows import floor_window
+from btc15_widget.windows import floor_window, seconds_remaining
 from btc15_widget.theme import DEFAULT_CONFIG_PATH, THEMES, load_theme_setting, resolve_theme, save_theme_setting
 
 MIN_WIDTH, MIN_HEIGHT = 80, 16  # the widest text block is 80 columns; the stack is about 15 rows
@@ -63,8 +64,12 @@ class WidgetApp(App):
     #bottom { dock: bottom; height: auto; }
     #legend { height: auto; margin-top: 1; }
     #status { height: auto; }
-    #body { height: 1fr; }
+    #main { height: 1fr; }
+    #body { width: 1fr; max-width: 84; }
     #body Static { height: auto; }
+    #side { width: 22; height: auto; margin-left: 2; }
+    #dial { height: auto; }
+    #logo { height: auto; margin-top: 1; }
     """
     BINDINGS = [("q", "quit", "Quit"), ("t", "cycle_theme", "Theme"), ("v", "toggle_view", "Table/strip"),
                 ("r", "refresh_data", "Refresh")]
@@ -94,9 +99,13 @@ class WidgetApp(App):
         with Vertical(id="top"):
             yield Static(id="header")
             yield Static(id="thead")  # column names, pinned above the scrolling rows
-        with VerticalScroll(id="body"):
-            yield Static(id="table")
-            yield Static(id="strip")
+        with Horizontal(id="main"):
+            with VerticalScroll(id="body"):
+                yield Static(id="table")
+                yield Static(id="strip")
+            with Vertical(id="side"):  # analog countdown and logo, shown only when the terminal is big enough
+                yield Static(id="dial")
+                yield Static(id="logo")
         with Vertical(id="bottom"):
             yield Static(id="legend")
             yield Static(id="status")
@@ -213,14 +222,19 @@ class WidgetApp(App):
         self.state.feed_status = self._feed_status(now)
         width, height = self.size
         if width < MIN_WIDTH or height < MIN_HEIGHT:
-            texts = {"header": TOO_SMALL, "thead": "", "table": "", "strip": "", "legend": "", "status": ""}
+            texts = {"header": TOO_SMALL, "thead": "", "table": "", "strip": "", "dial": "", "logo": "",
+                     "legend": "", "status": ""}
+            layout = None
         else:
+            layout = panel_layout(width, height)
             thead, rows = ("", "")
             if self.view == "table":
                 thead, rows = split_table(_table(self.state, now, theme))
             texts = {
                 "header": render_header(self.state, now, theme),
                 "thead": thead,
+                "dial": self._dial(now, theme, layout[0]) if layout else "",
+                "logo": render_logo(layout[0]) if layout and layout[1] else "",
                 "table": rows,
                 "strip": render_strip(self.state.strip_windows(now), theme) if self.view == "strip" else "",
                 "legend": render_legend(theme, self.view),
@@ -230,6 +244,10 @@ class WidgetApp(App):
         following = body.is_vertical_scroll_end  # stay on the newest row unless the user scrolled up
         for name, content in texts.items():
             self.query_one(f"#{name}", Static).update(content)
+        side = self.query_one("#side")
+        side.display = layout is not None
+        if layout:
+            side.styles.width = layout[0] + 2
         self.query_one("#table").display = self.view == "table"
         self.query_one("#thead").display = self.view == "table"
         self.query_one("#strip").display = self.view == "strip"
@@ -238,6 +256,11 @@ class WidgetApp(App):
         self._painted = texts
         self.screen.styles.background = BACKGROUND[theme]
         self.screen.styles.color = FOREGROUND[theme]
+
+    def _dial(self, now: datetime, theme: str, size: int):
+        gap = self.state.gap(now)
+        lean = None if gap is None else ("UP" if gap >= 0 else "DOWN")
+        return render_dial(seconds_remaining(now, floor_window(now)), lean, theme, size)
 
     # ---- actions ---------------------------------------------------------------------------
     def action_cycle_theme(self) -> None:

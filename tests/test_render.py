@@ -229,3 +229,11 @@ def test_split_table_separates_a_pinnable_header_from_the_rows():
     assert hex_of(body.get_style_at_offset(Console(), offset).bgcolor) == net_color(10.0, "dark")  # fills survive
     widths = {len(line) for line in (head.plain + "\n" + body.plain).split("\n")}
     assert len(widths) == 1  # header and rows line up column for column
+
+
+def test_legend_minus_marks_the_net_down_row():
+    lines = render_legend("dark", "table").plain.split("\n")
+    up = next(l for l in lines if l.startswith("net up"))
+    down = next(l for l in lines if l.startswith("net down"))
+    assert "1000+" in up and "1000-" not in up
+    assert "1000-" in down and "1000+" not in down

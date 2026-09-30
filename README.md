@@ -20,7 +20,8 @@ Polymarket US API keys are read from a local `.env` (`POLYMARKET_KEY_ID`, `POLYM
 ```
 uv sync
 uv run pm btc15 --hours 6     # one-shot styled table, last 6 hours
-uv run btc15-widget           # live widget: ticker + styled 24h table + colour key
+uv run btc15-widget           # live widget: ticker + styled 24h table + colour key;
+                              #   on terminals >=104 columns an analog countdown dial (and, >=33 rows, the logo) appears
                               #   q quit · t theme · v table/strip view · r refresh · arrows/PgUp/PgDn scroll
 uv run btc15-widget --snapshot  # print one plain-text frame and exit
 uv run pytest                 # tests

@@ -49,7 +49,7 @@ def _band_swatches(theme: str, sign: int) -> Text:
     for lower, edge in zip(lowers, BAND_EDGES):
         mid = (lower + edge) / 2
         text.append("█", style=Style(color=net_color(sign * mid, theme)))
-        text.append(f"{edge}{'+' if edge == BAND_EDGES[-1] else ''} ")
+        text.append(f"{edge}{('+' if sign > 0 else '-') if edge == BAND_EDGES[-1] else ''} ")
     return text
 
 

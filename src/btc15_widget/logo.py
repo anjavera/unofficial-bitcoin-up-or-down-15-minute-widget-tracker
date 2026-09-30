@@ -1,0 +1,61 @@
+"""Bitcoin logo as terminal pixel art (generated from the public-domain Bitcoin logo, Wikimedia Commons).
+
+Each row is a string of palette keys; "." is transparent. Rendered two pixels per cell with half blocks.
+"""
+
+PALETTE = {'o': '#f7931a', '1': '#fab766', '2': '#fcdbb3', 'w': '#ffffff'}
+
+LOGOS = {
+    28: [
+        "..........oooooooo..........",
+        "........oooooooooooo........",
+        "......oooooooooooooooo......",
+        ".....oooooooooooooooooo.....",
+        "....oooooooooooooooooooo....",
+        "...oooooooooo22o1oooooooo...",
+        "..oooooooo1oow2ow2oooooooo..",
+        "..ooooooo2ww2w11w1oooooooo..",
+        ".oooooooo12wwwwww1ooooooooo.",
+        ".oooooooooowww2wwww1ooooooo.",
+        "oooooooooo1ww2oo1wwwoooooooo",
+        "oooooooooo1ww1ooo2ww1ooooooo",
+        "oooooooooo2ww1oo1wwwoooooooo",
+        "oooooooooowwwwwwwww1oooooooo",
+        "ooooooooo1ww212www2ooooooooo",
+        "ooooooooo1ww1ooo2ww2oooooooo",
+        "ooooooo112wwoooo1wwwoooooooo",
+        "ooooooowwwww1ooo2ww2oooooooo",
+        ".oooooo12wwwwwwwwww1ooooooo.",
+        ".oooooooo1w22wwwww2oooooooo.",
+        "..ooooooo2wo1w111ooooooooo..",
+        "..ooooooo12owwoooooooooooo..",
+        "...ooooooooo11ooooooooooo...",
+        "....oooooooooooooooooooo....",
+        ".....oooooooooooooooooo.....",
+        "......oooooooooooooooo......",
+        "........oooooooooooo........",
+        "..........oooooooo..........",
+    ],
+    20: [
+        ".......oooooo.......",
+        ".....oooooooooo.....",
+        "...oooooooooooooo...",
+        "..ooooooo11ooooooo..",
+        "..ooooooo2112ooooo..",
+        ".ooooo1w2w2w1oooooo.",
+        ".oooooo1wwww21ooooo.",
+        "ooooooo1w2o1ww1ooooo",
+        "ooooooo1w2oo2w1ooooo",
+        "ooooooo2ww22wwoooooo",
+        "oooooooww12ww2oooooo",
+        "oooooo1w2oooww1ooooo",
+        "ooooowww21o1wwoooooo",
+        ".oooo11wwwwww2ooooo.",
+        ".ooooo1w1w111oooooo.",
+        "..oooo111woooooooo..",
+        "..oooooooooooooooo..",
+        "...oooooooooooooo...",
+        ".....oooooooooo.....",
+        ".......oooooo.......",
+    ],
+}
