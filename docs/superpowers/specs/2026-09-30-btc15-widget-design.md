@@ -11,7 +11,8 @@ Polymarket settles each window on **CF Benchmarks' Bitcoin Real-Time Index (BRTI
 60 BRTI prices in the last minute before each boundary, rounded to 2 decimals. Up if close >= open
 ("Yes" = Up). Polymarket's API exposes the open (`assetPriceTerms.priceToBeat`) and, after settling,
 the close (`settlementPrice`), but no live BRTI. CF Benchmarks' live feed is licensed data; an
-official feed can replace the proxy below later.
+official feed can replace the proxy below later. CF Benchmarks publishes no pricing or free tier; real-time
+access is by licence enquiry. **Decision (owner): no paid data sources for now, so the proxy below is used.**
 
 ## Data
 - **History (exact):** settled windows from Polymarket, addressed by slug
@@ -35,6 +36,11 @@ official feed can replace the proxy below later.
   Smallest step is a pale tint so it reads on dark backgrounds.
 - Signals row (see below).
 
+## Theme
+User-selectable **dark / light / system** (default: system). System follows the OS setting and updates live.
+The net-change gradient and green/red result marks get a palette per theme, with the smallest step still
+readable on both backgrounds. The choice is persisted in a local config file.
+
 ## Architecture
 1. `core` (no UI): history cache, Polymarket WebSocket client, proxy price aggregator, colour banding.
 2. Terminal widget (Textual), `pm widget`.
@@ -48,7 +54,14 @@ Display-only, disabled by default. Enabled only for patterns that survive across
 Unit tests: colour-band boundaries (both signs, cap), slug/window generation across hour and day
 boundaries, proxy composite maths, UP/DOWN rule (>=). Live parts verified against real data.
 
+## Decisions
+- Theme: dark, light or system (above).
+- No paid data sources for now; revisit official BRTI access only if it proves to be free.
+- This repo will absorb the existing `pm` CLI code (`client`, `cli`, `btc15`) so there is one project.
+
+## Later
+- Desktop shortcut: a Linux `.desktop` launcher (and install script) that opens the desktop window.
+  Not part of the first milestones.
+
 ## Open items
-- Decide dark/light default theme.
-- Whether to obtain official CF Benchmarks BRTI access.
-- Whether the repo should later absorb the existing `pm` CLI code.
+- None blocking; signal definitions wait on the recorded-data analysis (recording must be restarted, see notes).
