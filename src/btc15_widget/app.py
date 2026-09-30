@@ -2,19 +2,24 @@
 
 import argparse
 import asyncio
+import io
 import sys
 import threading
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from rich.console import Console
+from rich.text import Text
 from textual.app import App, ComposeResult
+from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Static
 
 from btc15_widget.colors import BACKGROUND
-from btc15_widget.render import render_header, render_legend, render_status, render_strip
+from btc15_widget.render import build_table, render_header, render_legend, render_status, render_strip, split_table
 from btc15_widget.sources import CALIBRATION_EVERY, QUOTES_EVERY, DataSources, default_sources, run_calibration
 from btc15_widget.state import WidgetState
+from btc15_widget.windows import floor_window
 from btc15_widget.theme import DEFAULT_CONFIG_PATH, THEMES, load_theme_setting, resolve_theme, save_theme_setting
 
 MIN_WIDTH, MIN_HEIGHT = 80, 16  # the widest text block is 80 columns; the stack is about 15 rows
@@ -28,20 +33,41 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def snapshot_text(state: WidgetState, now: datetime, theme: str) -> str:
+def _plain(renderable, width: int = 100) -> str:
+    if isinstance(renderable, str):
+        return renderable
+    if isinstance(renderable, Text):
+        return renderable.plain
+    console = Console(width=max(width, MIN_WIDTH), file=io.StringIO(), color_system=None, force_terminal=False)
+    console.print(renderable)
+    return console.file.getvalue().rstrip("\n")
+
+
+def _table(state: WidgetState, now: datetime, theme: str):
+    return build_table(state.table_windows(now), theme, volume=False,
+                       live_start=floor_window(now), live_price=state.proxy_price(now))
+
+
+def snapshot_text(state: WidgetState, now: datetime, theme: str, view: str = "table") -> str:
     """One plain-text frame of the whole widget (used by --snapshot)."""
-    parts = [
-        render_header(state, now, theme),
-        render_strip(state.strip_windows(now), theme),
-        render_legend(theme),
-        render_status(state, now, theme),
-    ]
-    return "\n\n".join(p.plain for p in parts)
+    body = _table(state, now, theme) if view == "table" else render_strip(state.strip_windows(now), theme)
+    parts = [render_header(state, now, theme), body, render_legend(theme, view), render_status(state, now, theme)]
+    return "\n\n".join(_plain(p) for p in parts)
 
 
 class WidgetApp(App):
-    CSS = "Static { height: auto; margin-bottom: 1; }"
-    BINDINGS = [("q", "quit", "Quit"), ("t", "cycle_theme", "Theme"), ("r", "refresh_data", "Refresh")]
+    CSS = """
+    #top { dock: top; height: auto; }
+    #header { height: auto; margin-bottom: 1; }
+    #thead { height: auto; }
+    #bottom { dock: bottom; height: auto; }
+    #legend { height: auto; margin-top: 1; }
+    #status { height: auto; }
+    #body { height: 1fr; }
+    #body Static { height: auto; }
+    """
+    BINDINGS = [("q", "quit", "Quit"), ("t", "cycle_theme", "Theme"), ("v", "toggle_view", "Table/strip"),
+                ("r", "refresh_data", "Refresh")]
 
     def __init__(self, sources: DataSources | None = None, config_path: Path = DEFAULT_CONFIG_PATH,
                  clock: Callable[[], datetime] = utcnow) -> None:
@@ -50,7 +76,8 @@ class WidgetApp(App):
         self.state = WidgetState()
         self.setting = load_theme_setting(self._config_path)
         self.theme_resolved = resolve_theme(self.setting)
-        self.last_paint: dict[str, str] = {}
+        self.view = "table"
+        self._painted: dict = {}
         self._stop = threading.Event()
         self._feed_stop = asyncio.Event()
         self._loading = False
@@ -58,9 +85,21 @@ class WidgetApp(App):
         self._last_calibration: datetime | None = None
         self._last_theme_check = 0.0
 
+    @property
+    def last_paint(self) -> dict[str, str]:
+        """Plain text of the last painted frame (used by tests)."""
+        return {name: _plain(content, self.size.width) for name, content in self._painted.items()}
+
     def compose(self) -> ComposeResult:
-        for name in ("header", "strip", "legend", "status"):
-            yield Static(id=name)
+        with Vertical(id="top"):
+            yield Static(id="header")
+            yield Static(id="thead")  # column names, pinned above the scrolling rows
+        with VerticalScroll(id="body"):
+            yield Static(id="table")
+            yield Static(id="strip")
+        with Vertical(id="bottom"):
+            yield Static(id="legend")
+            yield Static(id="status")
 
     # ---- lifecycle -------------------------------------------------------------------------
     def on_mount(self) -> None:
@@ -69,6 +108,7 @@ class WidgetApp(App):
                 self._sources = default_sources()
             except Exception as e:  # missing credentials etc.: show it in the app, never a traceback
                 self.state.error = str(e)[:200]
+        self.query_one("#body").focus()  # so the arrow and page keys scroll the table
         self.refresh_view()
         if self._sources is not None:
             self._start_history_load()
@@ -173,17 +213,29 @@ class WidgetApp(App):
         self.state.feed_status = self._feed_status(now)
         width, height = self.size
         if width < MIN_WIDTH or height < MIN_HEIGHT:
-            texts = {"header": TOO_SMALL, "strip": "", "legend": "", "status": ""}
+            texts = {"header": TOO_SMALL, "thead": "", "table": "", "strip": "", "legend": "", "status": ""}
         else:
+            thead, rows = ("", "")
+            if self.view == "table":
+                thead, rows = split_table(_table(self.state, now, theme))
             texts = {
                 "header": render_header(self.state, now, theme),
-                "strip": render_strip(self.state.strip_windows(now), theme),
-                "legend": render_legend(theme),
+                "thead": thead,
+                "table": rows,
+                "strip": render_strip(self.state.strip_windows(now), theme) if self.view == "strip" else "",
+                "legend": render_legend(theme, self.view),
                 "status": render_status(self.state, now, theme),
             }
+        body = self.query_one("#body")
+        following = body.is_vertical_scroll_end  # stay on the newest row unless the user scrolled up
         for name, content in texts.items():
             self.query_one(f"#{name}", Static).update(content)
-        self.last_paint = {k: v if isinstance(v, str) else v.plain for k, v in texts.items()}
+        self.query_one("#table").display = self.view == "table"
+        self.query_one("#thead").display = self.view == "table"
+        self.query_one("#strip").display = self.view == "strip"
+        if following:
+            self.call_after_refresh(body.scroll_end, animate=False)
+        self._painted = texts
         self.screen.styles.background = BACKGROUND[theme]
         self.screen.styles.color = FOREGROUND[theme]
 
@@ -192,6 +244,10 @@ class WidgetApp(App):
         self.setting = THEMES[(THEMES.index(self.setting) + 1) % len(THEMES)]
         save_theme_setting(self._config_path, self.setting)
         self.theme_resolved = resolve_theme(self.setting)
+        self.refresh_view()
+
+    def action_toggle_view(self) -> None:
+        self.view = "strip" if self.view == "table" else "table"
         self.refresh_view()
 
     def action_refresh_data(self) -> None:

@@ -11,6 +11,9 @@ from btc15_widget.sources import DataSources
 from btc15_widget.state import WidgetState
 from btc15_widget.windows import MARKET_SLUG, floor_window
 
+import re
+
+ROW = re.compile(r"\d\d-\d\d \d\d:\d\d-\d\d:\d\d")
 UTC = timezone.utc
 NOW = datetime(2026, 9, 30, 9, 20, tzinfo=UTC)
 STEP = timedelta(minutes=15)
@@ -69,8 +72,9 @@ def test_app_renders_header_strip_and_legend(tmp_path):
             paint = app.last_paint
             assert "≈ $84,000.50" in paint["header"] and "beat $84,000.00" in paint["header"]
             assert "Up 0.62" in paint["header"]
-            assert len(paint["strip"].split("\n")) == 4
-            assert "net up" in paint["legend"]
+            assert len(ROW.findall(paint["table"])) == 97  # 96 past windows + the live one
+            assert "Window (ET)" in paint["thead"] and "UP?" in paint["table"]  # live row leans UP (84000.50 vs open 84000.00)
+            assert "net up" in paint["legend"] and "Chg" in paint["legend"]
             assert "Signals: off" in paint["status"] and "feed: live" in paint["status"]
 
     run(scenario())
@@ -159,11 +163,15 @@ def test_rollover_repaint(tmp_path):
             assert "ends in 00:30" in app.last_paint["header"]
             clock_now["t"] = datetime(2026, 9, 30, 9, 30, 30, tzinfo=UTC)
             app.refresh_view()
-            header, strip = app.last_paint["header"], app.last_paint["strip"]
+            header, table = app.last_paint["header"], app.last_paint["table"]
             assert "ends in 14:30" in header and "beat —" in header  # new window has no open yet
-            rows = strip.split("\n")
-            assert len(rows) == 4 and all(len(r) == 36 for r in rows)  # still 96 cells
-            assert rows[-1].endswith("?")  # the 09:15 window is pending until Polymarket settles it
+            rows = [line for line in table.split("\n") if ROW.search(line)]
+            assert len(rows) == 97  # still 96 past windows + the live one
+            assert "LIVE" in rows[-1]
+            assert "UP" not in rows[-2] and "DOWN" not in rows[-2]  # the 09:15 window is pending until Polymarket settles it
+            await pilot.press("v")
+            strip_rows = app.last_paint["strip"].split("\n")
+            assert len(strip_rows) == 4 and all(len(r) == 36 for r in strip_rows) and strip_rows[-1].endswith("?")
 
     run(scenario())
 
@@ -174,6 +182,7 @@ def test_snapshot_text_is_plain_and_complete():
     s.apply_quotes({"a": 84000.5}, NOW)
     out = snapshot_text(s, NOW, "dark")
     assert "≈ $84,000.50" in out and "net up" in out and "Signals: off" in out
+    assert "Window (ET)" in out and len(ROW.findall(out)) == 97
     assert "\x1b" not in out
 
 
@@ -298,5 +307,45 @@ def test_layout_fits_an_80_column_terminal(tmp_path):
                 assert await until(pilot, lambda: app.state.windows and app.state.quotes and app.state.live_tick(NOW))
                 app.refresh_view()
                 assert app.last_paint["header"].startswith("Terminal too small") == too_small, size
+
+    run(scenario())
+
+
+def test_v_toggles_between_table_and_strip_views(tmp_path):
+    async def scenario():
+        app = make_app(tmp_path)
+        async with app.run_test(size=(100, 30)) as pilot:
+            assert await until(pilot, lambda: app.state.windows)
+            assert app.query_one("#table").display and not app.query_one("#strip").display
+            await pilot.press("v")
+            assert app.query_one("#strip").display and not app.query_one("#table").display
+            await pilot.press("v")
+            assert app.query_one("#table").display
+
+    run(scenario())
+
+
+def test_table_view_starts_scrolled_to_the_newest_window(tmp_path):
+    async def scenario():
+        app = make_app(tmp_path)
+        async with app.run_test(size=(100, 30)) as pilot:
+            assert await until(pilot, lambda: app.state.windows)
+            assert await until(pilot, lambda: app.query_one("#body").is_vertical_scroll_end, tries=60)
+            assert app.query_one("#body").max_scroll_y > 0  # 97 rows do not fit in 30 lines
+
+    run(scenario())
+
+
+def test_column_headers_stay_pinned_while_rows_scroll(tmp_path):
+    async def scenario():
+        app = make_app(tmp_path)
+        async with app.run_test(size=(100, 30)) as pilot:
+            assert await until(pilot, lambda: app.state.windows)
+            assert await until(pilot, lambda: app.query_one("#body").is_vertical_scroll_end and app.query_one("#body").max_scroll_y > 0, tries=60)
+            app.refresh_view()
+            assert "Chg $" in app.last_paint["thead"] and "Chg $" not in app.last_paint["table"]
+            assert app.query_one("#thead").display
+            await pilot.press("v")
+            assert not app.query_one("#thead").display  # the strip view has no column headers
 
     run(scenario())

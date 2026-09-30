@@ -146,3 +146,10 @@ def test_needs_refresh_rules():
     # complete history still refreshes after 300 s
     s.set_history(history(), NOW - timedelta(seconds=301))
     assert s.needs_history_refresh(NOW)
+
+
+def test_table_windows_are_the_strip_plus_the_live_window():
+    s = state_with()
+    rows = s.table_windows(NOW)
+    assert len(rows) == 97
+    assert rows[-1].start == floor_window(NOW) and rows[:-1] == s.strip_windows(NOW)

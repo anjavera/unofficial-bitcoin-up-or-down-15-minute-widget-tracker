@@ -55,6 +55,10 @@ class WidgetState:
         starts = [live - i * STEP for i in range(STRIP_WINDOWS, 0, -1)]
         return [known.get(s) or Window(start=s, open=None, close=None) for s in starts]
 
+    def table_windows(self, now: datetime) -> list[Window]:
+        """Table rows, oldest first: the 96 past windows, then the live one."""
+        return self.strip_windows(now) + [self.live_window(now)]
+
     def live_window(self, now: datetime) -> Window:
         start = floor_window(now)
         return self._by_start().get(start) or Window(start=start, open=None, close=None)

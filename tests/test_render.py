@@ -165,3 +165,67 @@ def test_text_blocks_fit_the_minimum_terminal_width():
     for block in blocks:
         for line in block.plain.split("\n"):
             assert len(line) <= MIN_WIDTH, (len(line), line)
+
+
+# ---- table (shared by `pm btc15` and the live widget) ------------------------------------------
+from btc15_widget.render import build_table, split_table
+
+
+def table_cells(table, name):
+    return list(next(c for c in table.columns if c.header == name)._cells)
+
+
+def live_window():
+    return Window(T0, open=100.0, close=None, status="OPEN")
+
+
+def test_live_row_shows_provisional_price_and_lean_up():
+    table = build_table([live_window()], "dark", volume=False, live_start=T0, live_price=105.0)
+    close = table_cells(table, "Close")[0]
+    assert "≈" in close.plain and "105.00" in close.plain
+    assert hex_of(table_cells(table, "Chg $")[0].style.bgcolor) == net_color(5.0, "dark")
+    result = table_cells(table, "Result")[0]
+    assert result.plain.strip() == "UP?"
+    assert hex_of(result.style.color) == result_color("UP", "dark") and result.style.bgcolor is None  # no fill until settled
+
+
+def test_live_row_lean_down():
+    table = build_table([live_window()], "dark", volume=False, live_start=T0, live_price=90.0)
+    assert table_cells(table, "Result")[0].plain.strip() == "DOWN?"
+    assert hex_of(table_cells(table, "Chg %")[0].style.bgcolor) == net_color(-10.0, "dark")
+
+
+def test_live_row_without_a_price_is_plain_live():
+    table = build_table([live_window()], "dark", volume=False, live_start=T0, live_price=None)
+    assert table_cells(table, "Result")[0].plain.strip() == "LIVE"
+    assert table_cells(table, "Chg $")[0].style.bgcolor is None
+    assert "≈" not in table_cells(table, "Close")[0].plain
+
+
+def test_non_live_unsettled_window_is_not_given_the_live_price():
+    other = Window(T0 + timedelta(minutes=15), open=100.0, close=None, status="RESOLVING")
+    table = build_table([other], "dark", volume=False, live_start=T0, live_price=105.0)
+    assert table_cells(table, "Result")[0].plain.strip() == "-"
+    assert table_cells(table, "Chg $")[0].style.bgcolor is None
+
+
+def test_table_without_volume_fits_80_columns():
+    ws = [Window(T0 + timedelta(minutes=15 * i), open=99000.12, close=100123.45) for i in range(5)]
+    ws.append(Window(T0 + timedelta(minutes=75), open=99000.12, close=None, status="OPEN"))
+    table = build_table(ws, "dark", volume=False, live_start=ws[-1].start, live_price=100123.45)
+    console = Console(width=200, record=True, file=open("/dev/null", "w"))
+    console.print(table)
+    assert max(len(line) for line in console.export_text().split("\n")) <= 80
+
+
+def test_split_table_separates_a_pinnable_header_from_the_rows():
+    ws = [Window(T0 + timedelta(minutes=15 * i), open=100.0, close=110.0) for i in range(5)]
+    head, body = split_table(build_table(ws, "dark", volume=False))
+    assert len(head.plain.split("\n")) == 3  # top border, column names, separator
+    assert "Window (ET)" in head.plain and "Chg $" in head.plain and "Result" in head.plain
+    assert "Window (ET)" not in body.plain
+    assert len([line for line in body.plain.split("\n") if "+10.00" in line]) == 5
+    offset = body.plain.index("+10.00")
+    assert hex_of(body.get_style_at_offset(Console(), offset).bgcolor) == net_color(10.0, "dark")  # fills survive
+    widths = {len(line) for line in (head.plain + "\n" + body.plain).split("\n")}
+    assert len(widths) == 1  # header and rows line up column for column

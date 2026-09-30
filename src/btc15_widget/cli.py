@@ -6,22 +6,15 @@ Usage: uv run pm <command> [args] [--json]
 import argparse
 import json
 import sys
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
-from rich import box
-from rich.console import Console
-from rich.style import Style
-from rich.table import Table
-from rich.text import Text
 
 from btc15_widget.client import get_client
-from btc15_widget.colors import net_color, result_color, text_on
 from btc15_widget.history import HISTORY_CACHE, load_history
 from btc15_widget.model import Window
+from btc15_widget.render import build_table, print_table  # noqa: F401  (re-exported for callers and tests)
 from btc15_widget.theme import load_theme_setting, resolve_theme
 
-ET = ZoneInfo("America/New_York")
 
 
 def usd(amount) -> str:
@@ -141,68 +134,6 @@ def windows_to_json(windows: list[Window]) -> list[dict]:
          "status": w.status, "volume": w.volume, "error": w.error}
         for w in windows
     ]
-
-
-COLUMN_WIDTHS = {"Window (ET)": 19, "Open": 12, "Close": 12, "Chg $": 11, "Chg %": 10, "Result": 6, "Volume": 11}
-ZEBRA = {"dark": "#e6edf3 on #161b22", "light": "#1f2328 on #eef1f5"}  # own text colour: readable on any terminal
-VOLUME_MIN_TERMINAL_WIDTH = 90
-
-
-def _cell(text: str, width: int, align: str = ">", style: Style | None = None) -> Text:
-    """A cell padded to its full column width so a fill colour covers the whole cell."""
-    return Text(f" {text:{align}{width - 2}} ", style=style or Style())
-
-
-def build_table(windows: list[Window], theme: str, volume: bool = True) -> Table:
-    """Grid table: Chg $ / Chg % filled with the blue/orange net gradient, Result filled green/red."""
-    columns = [c for c in COLUMN_WIDTHS if volume or c != "Volume"]
-    table = Table(box=box.SQUARE, padding=0, pad_edge=False, show_lines=False,
-                  row_styles=["", ZEBRA[theme]], border_style="grey50", header_style="bold")
-    for name in columns:
-        table.add_column(name, width=COLUMN_WIDTHS[name], no_wrap=True, justify="center")
-    dim = Style(dim=True)
-    for w in windows:
-        t = w.start.astimezone(ET)
-        label = f"{t:%m-%d %H:%M}-{(t + timedelta(minutes=15)):%H:%M}"
-        width = COLUMN_WIDTHS
-        fmt = lambda v: f"{v:,.2f}" if v is not None else "-"
-        empty = (_cell("-", width["Chg $"], style=dim), _cell("-", width["Chg %"], style=dim))
-        if w.error:
-            result = _cell("gap", width["Result"], "^", dim)
-            chg, pct = empty
-        elif w.net is not None:
-            fill = net_color(w.net, theme)
-            style = Style(color=text_on(fill), bgcolor=fill)
-            chg = _cell(f"{w.net:+,.2f}", width["Chg $"], style=style)
-            pct = _cell(f"{w.net / w.open * 100:+.3f}%", width["Chg %"], style=style)
-            mark = result_color(w.result, theme)
-            result = _cell(w.result, width["Result"], "^", Style(color=text_on(mark), bgcolor=mark, bold=True))
-        else:
-            live = w.status in ("OPEN", "ACTIVE", "")
-            result = _cell("LIVE" if live else "-", width["Result"], "^", dim)
-            chg, pct = empty
-        row = {
-            "Window (ET)": _cell(label, width["Window (ET)"], "<"),
-            "Open": _cell(fmt(w.open), width["Open"]), "Close": _cell(fmt(w.close), width["Close"]),
-            "Chg $": chg, "Chg %": pct, "Result": result,
-            "Volume": _cell(f"{w.volume:,.0f}" if w.volume else "-", width["Volume"]),
-        }
-        table.add_row(*(row[c] for c in columns))
-    return table
-
-
-def print_table(windows: list[Window], theme: str = "dark") -> None:
-    console = Console()
-    console.print("BTC 15-min Up/Down — all times ET, prices are BRTI (Chg columns: blue = up, orange = down)", style="bold")
-    console.print(build_table(windows, theme, volume=console.width >= VOLUME_MIN_TERMINAL_WIDTH))
-    settled = [w for w in windows if w.settled]
-    ups = sum(w.result == "UP" for w in windows)
-    downs = sum(w.result == "DOWN" for w in windows)
-    if settled:
-        lo = min(min(w.open, w.close) for w in settled)
-        hi = max(max(w.open, w.close) for w in settled)
-        net = settled[-1].close - settled[0].open
-        console.print(f"{ups} up / {downs} down   range ${lo:,.2f} – ${hi:,.2f}   net {net:+,.2f}", highlight=False)
 
 
 def cmd_btc15(client, args):
