@@ -2,6 +2,7 @@
 
 BAND_EDGES = (10, 25, 50, 100, 200, 300, 400, 500, 1000)
 STEPS = len(BAND_EDGES)
+BACKGROUND = {"dark": "#0e1117", "light": "#ffffff"}
 
 # (pale end, saturated end) per theme; steps are linear RGB interpolations
 _BLUE = {"dark": ("#cfe3ff", "#1f5fd6"), "light": ("#c2d8ff", "#0b3c9c")}
