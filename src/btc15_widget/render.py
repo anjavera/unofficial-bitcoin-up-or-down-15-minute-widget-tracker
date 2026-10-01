@@ -123,7 +123,8 @@ def render_header(state: WidgetState, now: datetime, theme: str) -> Text:
 
 def render_status(state: WidgetState, now: datetime, theme: str) -> Text:
     age = "—" if state.quotes_at is None else f"{max(0, int((now - state.quotes_at).total_seconds()))}s ago"
-    text = Text(f"feed: {state.feed_status} · quotes {age}  ", style=DIM)
+    mode = f" ({state.feed_mode})" if state.feed_mode else ""
+    text = Text(f"feed: {state.feed_status}{mode} · quotes {age}  ", style=DIM)
     text.append("Signals: off (see data/patterns.md)", style=DIM)
     if state.loading and not state.windows:
         text.append("\nloading 24h history… (first run takes a few minutes; later runs are cached)")
@@ -218,7 +219,8 @@ def split_table(table: Table) -> tuple[Text, Text]:
 def print_table(windows: list[Window], theme: str = "dark") -> None:
     console = Console()
     console.print("BTC 15-min Up/Down — all times ET, prices are BRTI (Chg columns: blue = up, orange = down)", style="bold")
-    console.print(build_table(windows, theme, volume=console.width >= VOLUME_MIN_TERMINAL_WIDTH))
+    show_volume = console.width >= VOLUME_MIN_TERMINAL_WIDTH and any(w.volume for w in windows)
+    console.print(build_table(windows, theme, volume=show_volume))
     settled = [w for w in windows if w.settled]
     ups = sum(w.result == "UP" for w in windows)
     downs = sum(w.result == "DOWN" for w in windows)

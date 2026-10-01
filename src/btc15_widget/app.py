@@ -70,9 +70,10 @@ class WidgetApp(App):
     """
     BINDINGS = [("q", "quit", "Quit"), ("v", "toggle_view", "Table/strip"), ("r", "refresh_data", "Refresh")]
 
-    def __init__(self, sources: DataSources | None = None, clock: Callable[[], datetime] = utcnow) -> None:
+    def __init__(self, sources: DataSources | None = None, clock: Callable[[], datetime] = utcnow,
+                 use_keys: bool = True) -> None:
         super().__init__()
-        self._sources, self.clock = sources, clock
+        self._sources, self.clock, self._use_keys = sources, clock, use_keys
         self.state = WidgetState()
         self.view = "table"
         self._painted: dict = {}
@@ -104,10 +105,12 @@ class WidgetApp(App):
     def on_mount(self) -> None:
         if self._sources is None:
             try:
-                self._sources = default_sources()
+                self._sources = default_sources(use_keys=self._use_keys)
             except Exception as e:  # missing credentials etc.: show it in the app, never a traceback
                 self.state.error = str(e)[:200]
         self.query_one("#body").focus()  # so the arrow and page keys scroll the table
+        if self._sources is not None:
+            self.state.feed_mode = self._sources.mode
         self.refresh_view()
         if self._sources is not None:
             self._start_history_load()
@@ -285,6 +288,7 @@ def _print_snapshot(sources: DataSources, clock: Callable[[], datetime]) -> None
     run_calibration(state, sources, now)
     asyncio.run(_collect_tick(sources, state, clock))
     state.feed_status = "live" if state.live_tick(clock()) else "no live tick"
+    state.feed_mode = sources.mode
     print(snapshot_text(state, clock(), THEME))
 
 
@@ -292,12 +296,13 @@ def main(argv: list[str] | None = None, sources: DataSources | None = None,
          clock: Callable[[], datetime] = utcnow) -> None:
     parser = argparse.ArgumentParser(prog="btc15-widget", description="Live BTC 15-minute Up/Down terminal widget")
     parser.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
+    parser.add_argument("--keyless", action="store_true", help="ignore any API keys and use public data only")
     args = parser.parse_args(argv)
     if not args.snapshot:
-        WidgetApp(sources=sources, clock=clock).run()
+        WidgetApp(sources=sources, clock=clock, use_keys=not args.keyless).run()
         return
     try:
-        _print_snapshot(sources or default_sources(), clock)
+        _print_snapshot(sources or default_sources(use_keys=not args.keyless), clock)
     except Exception as e:
         print(f"Error: {str(e)[:300]}", file=sys.stderr)
         sys.exit(1)

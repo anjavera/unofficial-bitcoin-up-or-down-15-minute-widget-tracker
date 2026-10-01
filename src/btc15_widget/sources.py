@@ -3,11 +3,10 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from btc15_widget.calibration import Calibration, fetch_candles, measure
-from btc15_widget.client import get_client
-from btc15_widget.feed import LiveFeed
+from btc15_widget.client import get_public_client, has_credentials
+from btc15_widget.feed import LiveFeed, PollingFeed
 from btc15_widget.history import HISTORY_CACHE, load_history
 from btc15_widget.model import LiveTick, Window
 from btc15_widget.proxy import fetch_quotes
@@ -15,7 +14,6 @@ from btc15_widget.state import WidgetState
 
 QUOTES_EVERY = 2.0  # seconds between exchange quote polls
 CALIBRATION_EVERY = 1800  # seconds between calibration runs
-WIDGET_HISTORY_CACHE = Path.home() / ".cache" / "btc15-widget" / "widget-history.json"  # no volumes; keeps the pm CLI cache intact
 CALIBRATION_HOURS = 4  # keeps the candle range under Coinbase's 300-candle cap
 
 
@@ -24,19 +22,26 @@ class DataSources:
     load_history: Callable[[datetime], list[Window]]
     fetch_quotes: Callable[[], dict[str, float | None]]
     fetch_candles: Callable[[datetime, datetime], dict]
-    feed_factory: Callable[[Callable[[LiveTick], None]], LiveFeed | None]
+    feed_factory: Callable[[Callable[[LiveTick], None]], PollingFeed | LiveFeed | None]
     close: Callable[[], None] = lambda: None
+    mode: str = "keyless"  # "keyed" when the user's own API keys are in use
 
 
-def default_sources() -> DataSources:
-    """Real sources. Raises RuntimeError when Polymarket credentials are missing."""
-    api = get_client()
+def default_sources(use_keys: bool = True) -> DataSources:
+    """Real sources. Everything needed is public data, so keys are optional.
+
+    With `use_keys` (the default) and API keys set up by the user, the faster authenticated live feed is used;
+    otherwise (or with use_keys=False) prices are polled from the public order book.
+    """
+    api = get_public_client()
+    keyed = use_keys and has_credentials()
     return DataSources(
-        load_history=lambda now: load_history(api, now, hours=24, cache_path=WIDGET_HISTORY_CACHE, with_volume=False),
+        load_history=lambda now: load_history(api, now, hours=24, cache_path=HISTORY_CACHE, with_volume=False),
         fetch_quotes=fetch_quotes,
         fetch_candles=fetch_candles,
-        feed_factory=lambda on_tick: LiveFeed(on_tick),
+        feed_factory=(lambda on_tick: LiveFeed(on_tick)) if keyed else (lambda on_tick: PollingFeed(on_tick, api.markets.book)),
         close=api.close,
+        mode="keyed" if keyed else "keyless",
     )
 
 

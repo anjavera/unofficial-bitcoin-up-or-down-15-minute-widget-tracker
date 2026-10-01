@@ -103,3 +103,61 @@ def test_striped_rows_set_their_own_text_colour(theme):
 
     stripe = Style.parse(styled_table(theme).row_styles[1])
     assert stripe.color is not None and stripe.bgcolor is not None  # readable whatever the terminal's own colours
+
+
+class FakeApi:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def test_btc15_and_market_commands_use_the_keyless_client(monkeypatch, capsys):
+    import btc15_widget.cli as cli_module
+
+    api = FakeApi()
+    monkeypatch.setattr(cli_module, "get_client", lambda: (_ for _ in ()).throw(AssertionError("must not need keys")))
+    monkeypatch.setattr(cli_module, "get_public_client", lambda: api)
+    monkeypatch.setattr(cli_module, "load_history", lambda client, now, **kw: windows())
+    cli_module.main(["btc15", "--hours", "1"])
+    assert api.closed and "UP" in capsys.readouterr().out
+
+
+def test_account_commands_still_need_keys_and_say_so(monkeypatch, capsys):
+    import btc15_widget.cli as cli_module
+
+    def no_keys():
+        raise RuntimeError("Missing POLYMARKET_KEY_ID / POLYMARKET_SECRET_KEY")
+
+    monkeypatch.setattr(cli_module, "get_client", no_keys)
+    monkeypatch.setattr(cli_module, "get_public_client", lambda: (_ for _ in ()).throw(AssertionError("account needs keys")))
+    with pytest.raises(SystemExit) as exit_info:
+        cli_module.main(["balances"])
+    assert "POLYMARKET_KEY_ID" in str(exit_info.value)
+
+
+def test_volume_is_opt_in_for_btc15(monkeypatch):
+    import btc15_widget.cli as cli_module
+
+    seen = {}
+    monkeypatch.setattr(cli_module, "get_public_client", lambda: FakeApi())
+    monkeypatch.setattr(cli_module, "load_history", lambda client, now, **kw: seen.update(kw) or windows())
+    cli_module.main(["btc15"])
+    assert seen["with_volume"] is False
+    cli_module.main(["btc15", "--volume"])
+    assert seen["with_volume"] is True
+
+
+def test_volume_column_is_hidden_when_nobody_fetched_volume(capsys):
+    no_volume = [Window(T, open=100.0, close=110.0, status="RESOLVED")]
+    from rich.console import Console as RichConsole
+    import btc15_widget.render as render_module
+
+    wide = RichConsole(width=200, record=True, file=open("/dev/null", "w"))
+    render_module.Console = lambda: wide  # print_table builds its own Console; give it a wide one
+    try:
+        render_module.print_table(no_volume)
+    finally:
+        render_module.Console = RichConsole
+    assert "Volume" not in wide.export_text()

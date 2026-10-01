@@ -15,10 +15,16 @@ official feed can replace the proxy below later. CF Benchmarks publishes no pric
 access is by licence enquiry. **Decision (owner): no paid data sources for now, so the proxy below is used.**
 
 ## Data
+- **No API keys** are needed for the widget or `pm btc15`. Keys are optional: when the user has set them up the
+  widget uses the authenticated WebSocket feed (`LiveFeed`, status `keyed`); `--keyless` forces the public path.
+  Keys also serve account commands and the recorder.
 - **History (exact):** settled windows from Polymarket, addressed by slug
   `btc-updown-15m-YYYY-MM-DD-HHMMz` (market slug prefixed `cpc-`). Cached locally; only new windows fetched.
-- **Live Polymarket:** `polymarket_us` `MarketsWebSocket` (`subscribe_market_data_lite` + `subscribe_trades`)
-  for Up price, bid/ask, spread, trades. Measured ~10 messages/s on one window.
+- **Live Polymarket (keyless, updated 2026-10-01):** poll the public order book (`markets.book`) every 2 s for the
+  live window: Up price = midpoint of best bid/ask (last trade if one side is empty), spread, last trade. The keyed
+  WebSocket and `markets.bbo` are not used (`bbo` returns 404 for a live market for minutes after it opens).
+- **History bulk request:** one `events.list({"slug": [...], "limit": 100})` returns up to 100 windows (0.5 s for 97);
+  per-window requests remain only as a fallback. Volume needs one extra request per window, so it is opt-in.
 - **Live BTC (proxy):** composite (mean) of Coinbase, Kraken, Bitstamp, Gemini public data, shown as
   "≈". Calibration on 17 settled windows (minute-before-boundary candles vs BRTI open):
   composite mean |error| $4.65, max $9.12, bias about -$4; per exchange mean |error| $4.1 to $9.7.

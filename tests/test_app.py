@@ -120,7 +120,7 @@ def test_startup_error_shows_panel_not_traceback(tmp_path):
 
 
 def test_default_sources_failure_is_shown_in_app(tmp_path, monkeypatch):
-    def no_creds():
+    def no_creds(**kwargs):
         raise RuntimeError("Missing POLYMARKET_KEY_ID / POLYMARKET_SECRET_KEY")
 
     monkeypatch.setattr(app_module, "default_sources", no_creds)
@@ -409,5 +409,19 @@ def test_coin_is_centred_in_the_space_right_of_the_table(tmp_path):
             assert abs(coin.region.x + coin.region.width / 2 - free_middle) <= 1, "coin is not centred horizontally"
             main_middle = main.region.y + main.region.height / 2
             assert abs(coin.region.y + coin.region.height / 2 - main_middle) <= 1, "coin is not centred vertically"
+
+    run(scenario())
+
+
+def test_status_line_says_whether_keys_are_in_use(tmp_path):
+    async def scenario():
+        for mode in ("keyless", "keyed"):
+            src = sources(lambda: NOW, None)
+            src.mode = mode
+            app = WidgetApp(sources=src, clock=lambda: NOW)
+            async with app.run_test(size=(100, 30)) as pilot:
+                assert await until(pilot, lambda: app.state.windows)
+                app.refresh_view()
+                assert f"({mode})" in app.last_paint["status"]
 
     run(scenario())

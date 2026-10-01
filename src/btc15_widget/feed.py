@@ -1,4 +1,8 @@
-"""Live Polymarket US price feed for the BTC 15m markets (read-only, reconnecting)."""
+"""Live Polymarket US prices for the BTC 15m markets.
+
+Two interchangeable feeds: `PollingFeed` polls the public order book and needs no API keys; `LiveFeed` uses the
+authenticated WebSocket (push updates) and is used automatically when the user has set up API keys.
+"""
 
 import asyncio
 from collections.abc import Callable
@@ -8,9 +12,11 @@ from polymarket_us.websocket import MarketsWebSocket
 
 from btc15_widget.client import load_credentials
 from btc15_widget.model import LiveTick
-from btc15_widget.windows import window_slugs
+from btc15_widget.windows import MARKET_SLUG, floor_window, window_slugs
 
-SESSION_SECONDS = 3600  # re-subscribe hourly so the window list stays current
+POLL_EVERY = 2.0  # seconds between price polls
+MAX_BACKOFF = 60
+SESSION_SECONDS = 3600  # keyed feed: re-subscribe hourly so the window list stays current
 WINDOWS_TO_FOLLOW = 6  # must cover SESSION_SECONDS plus the rest of the current window
 
 
@@ -36,12 +42,56 @@ def parse_lite(message: dict) -> LiveTick | None:
     )
 
 
+
+def parse_book(response) -> LiveTick:
+    """A LiveTick from a `markets.book` response; raises ValueError when the response is not shaped as expected.
+
+    The Up price is the midpoint of the best bid and ask, or the last trade when one side of the book is empty.
+    """
+    try:
+        data = response["marketData"]
+        slug = data["marketSlug"]
+    except (KeyError, TypeError) as e:
+        raise ValueError(f"unexpected order book response: {str(response)[:80]}") from e
+    bids = [p for p in (_px(level.get("px")) for level in data.get("bids") or []) if p is not None]
+    offers = [p for p in (_px(level.get("px")) for level in data.get("offers") or []) if p is not None]
+    best_bid, best_ask = (max(bids) if bids else None), (min(offers) if offers else None)
+    stats = data.get("stats") or {}
+    last = _px(stats.get("lastTradePx"))
+    shares = stats.get("sharesTraded")
+    mid = (best_bid + best_ask) / 2 if best_bid is not None and best_ask is not None else last
+    return LiveTick(slug=slug, up_price=mid, best_bid=best_bid, best_ask=best_ask, last_trade=last,
+                    shares_traded=float(shares) if shares else None)
+
+
 async def wait_or_stop(delay: float, stop: asyncio.Event) -> None:
     """Sleep up to `delay` seconds, returning early if `stop` is set."""
     try:
         await asyncio.wait_for(stop.wait(), timeout=delay)
     except asyncio.TimeoutError:
         pass
+
+
+class PollingFeed:
+    """Polls the live window's order book every couple of seconds and reports each price as a LiveTick."""
+
+    def __init__(self, on_tick: Callable[[LiveTick], None], fetch_book: Callable[[str], dict], interval: float = POLL_EVERY,
+                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc), sleep=wait_or_stop) -> None:
+        self.on_tick, self._fetch, self._interval, self._clock, self._sleep = on_tick, fetch_book, interval, clock, sleep
+
+    async def run(self, stop: asyncio.Event) -> None:
+        failures = 0
+        while not stop.is_set():
+            slug = MARKET_SLUG.format(floor_window(self._clock()))  # re-read each time: follows the rollover
+            try:
+                tick = parse_book(await asyncio.to_thread(self._fetch, slug))
+            except Exception:  # network error, rate limit or odd response: back off and keep going
+                failures += 1
+                delay = min(5 * failures, MAX_BACKOFF)
+            else:
+                failures, delay = 0, self._interval
+                self.on_tick(tick)
+            await self._sleep(delay, stop)
 
 
 class LiveFeed:
@@ -84,3 +134,4 @@ class LiveFeed:
             failures = 0 if timed_out else failures + 1  # any early drop backs off, even after a tick
             if not timed_out:
                 await self._sleep(min(5 * failures, 60), stop)
+
