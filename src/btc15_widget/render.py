@@ -90,12 +90,16 @@ def _countdown(now: datetime, start: datetime) -> str:
 
 def render_header(state: WidgetState, now: datetime, theme: str) -> Text:
     live = state.live_window(now)
-    price, gap = state.proxy_price(now), state.gap(now)
+    price, gap, source = state.live_price(now), state.gap(now), state.price_source(now)
     if price is not None:
         price_text = f"${price:,.2f}"
     else:
         price_text = "stale" if state.quotes_at is not None and state.is_stale("quotes", now) else "—"
-    error = f" (±${state.calibration.mean_abs_error:.1f})" if state.calibration else ""
+    if source == "index":  # the official index is exact: no estimate marker, no error margin
+        approx, error = "", " (Polymarket index)"
+    else:
+        approx = "≈ "
+        error = f" (±${state.calibration.mean_abs_error:.1f})" if state.calibration else ""
     beat = f"${live.open:,.2f}" if live.open is not None else "—"
     gap_text = "—" if gap is None else f"{_signed_money(gap)} ({'UP' if gap >= 0 else 'DOWN'})"
 
@@ -111,7 +115,7 @@ def render_header(state: WidgetState, now: datetime, theme: str) -> Text:
         spread = "—" if tick.spread is None else f"{tick.spread:.2f}"
 
     text = Text()
-    text.append(f"BTC ≈ {price_text}{error}  beat {beat}  gap {gap_text}  ends in {_countdown(now, live.start)}\n")
+    text.append(f"BTC {approx}{price_text}{error}  beat {beat}  gap {gap_text}  ends in {_countdown(now, live.start)}\n")
     text.append(f"Up {up}  Down {down}  spread {spread}   ")
     text.append("provisional ", style=DIM)
     if gap is None:
@@ -125,7 +129,13 @@ def render_header(state: WidgetState, now: datetime, theme: str) -> Text:
 def render_status(state: WidgetState, now: datetime, theme: str) -> Text:
     age = "—" if state.quotes_at is None else f"{max(0, int((now - state.quotes_at).total_seconds()))}s ago"
     mode = f" ({state.feed_mode})" if state.feed_mode else ""
-    text = Text(f"feed: {state.feed_status}{mode} · quotes {age}  ", style=DIM)
+    market = state.market_state_label(now)
+    market = f" · market {market}" if market else ""
+    if state.price_source(now) == "index":
+        age = f"price: index {max(0, int((now - state.index_at).total_seconds()))}s ago"
+    else:
+        age = f"quotes {age}"
+    text = Text(f"feed: {state.feed_status}{mode}{market} · {age}  ", style=DIM)
     text.append("Signals: off (see data/patterns.md)", style=DIM)
     if state.loading and not state.windows:
         text.append("\nloading 24h history… (first run takes a few minutes; later runs are cached)")

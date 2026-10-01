@@ -25,6 +25,8 @@ class WidgetState:
     ticks_at: dict[str, datetime] = field(default_factory=dict)
     quotes: dict[str, float | None] = field(default_factory=dict)
     quotes_at: datetime | None = None
+    index_price: float | None = None  # Polymarket's own BTC reference index (what the markets settle on)
+    index_at: datetime | None = None
     calibration: Calibration | None = None
     feed_status: str = "connecting"
     feed_mode: str = ""  # "keyed" or "keyless"
@@ -46,6 +48,10 @@ class WidgetState:
 
     def apply_quotes(self, quotes: dict[str, float | None], now: datetime) -> None:
         self.quotes, self.quotes_at = quotes, now
+
+    def apply_index(self, price: float | None, now: datetime) -> None:
+        if price is not None:  # a failed poll keeps the last price, which then goes stale on its own
+            self.index_price, self.index_at = price, now
 
     def _by_start(self) -> dict[datetime, Window]:
         return {w.start: w for w in self.windows}
@@ -71,7 +77,7 @@ class WidgetState:
         return window is not None and window.error == NO_MARKET
 
     def is_stale(self, kind: str, now: datetime) -> bool:
-        at = self.ticks_at.get(MARKET_SLUG.format(floor_window(now))) if kind == "tick" else self.quotes_at
+        at = {"tick": self.ticks_at.get(MARKET_SLUG.format(floor_window(now))), "index": self.index_at}.get(kind, self.quotes_at)
         return at is None or (now - at).total_seconds() > STALE_SECONDS
 
     def proxy_price(self, now: datetime) -> float | None:
@@ -82,8 +88,29 @@ class WidgetState:
             price = apply_bias(price, -self.calibration.bias)  # bias = proxy - BRTI, so subtract it
         return price
 
+    def index_live(self, now: datetime) -> float | None:
+        return None if self.is_stale("index", now) else self.index_price
+
+    def live_price(self, now: datetime) -> float | None:
+        """The official index when fresh (exact), else the exchange proxy (an estimate), else None."""
+        index = self.index_live(now)
+        return index if index is not None else self.proxy_price(now)
+
+    def price_source(self, now: datetime) -> str | None:
+        if self.index_live(now) is not None:
+            return "index"
+        return "proxy" if self.proxy_price(now) is not None else None
+
+    def market_state_label(self, now: datetime) -> str | None:
+        """'halted', 'suspended' ... when the live market is not open for trading; None when open or unknown."""
+        tick = self.live_tick(now)
+        state = tick.state if tick else None
+        if not state or state == "MARKET_STATE_OPEN":
+            return None
+        return state.removeprefix("MARKET_STATE_").replace("_", " ").lower()
+
     def gap(self, now: datetime) -> float | None:
-        price, open_ = self.proxy_price(now), self.live_window(now).open
+        price, open_ = self.live_price(now), self.live_window(now).open
         return None if price is None or open_ is None else price - open_
 
     def needs_history_refresh(self, now: datetime) -> bool:

@@ -38,6 +38,7 @@ class LiveTick:
     best_ask: float | None
     last_trade: float | None
     shares_traded: float | None
+    state: str | None = None  # e.g. MARKET_STATE_OPEN / _HALTED, when the source reports it
 
     @property
     def spread(self) -> float | None:
