@@ -81,3 +81,7 @@ Commands: see `CLAUDE.md`. Plans: `docs/superpowers/plans/`.
 History for the last 24 hours loads in about a second with one request, and settled windows are cached locally.
 The live price is an exchange-composite estimate (≈), not CF Benchmarks BRTI. Windows are coloured from real
 settled BRTI; the live window is provisional.
+
+## License
+
+[MIT](LICENSE). This project is unofficial and comes with no warranty; see the notice at the top.

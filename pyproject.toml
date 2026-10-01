@@ -3,6 +3,8 @@ name = "btc15-widget"
 version = "0.1.0"
 description = "Unofficial live widget and recorder for Polymarket US BTC Up or Down 15-minute markets"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "polymarket-us>=0.1.2",
