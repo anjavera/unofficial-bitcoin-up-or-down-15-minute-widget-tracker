@@ -255,3 +255,27 @@ def test_table_legend_explains_none_and_gap_within_80_columns():
     assert all(len(line) <= 80 for line in lines)
     note = lines[-1]
     assert "none" in note and "gap" in note and "no market" in note
+
+
+def test_header_shows_the_official_index_without_the_estimate_marker():
+    s = full_state()
+    s.apply_index(83880.00, NOW)
+    out = header(s)
+    assert "BTC $83,880.00 (Polymarket index)" in out and "≈" not in out and "±" not in out
+    assert "gap +$5.84 (UP)" in out
+
+
+def test_header_falls_back_to_the_proxy_when_the_index_is_stale():
+    s = full_state()
+    s.apply_index(83880.00, NOW - timedelta(seconds=30))
+    out = header(s)
+    assert "≈ $83,874.95" in out and "83,880" not in out
+
+
+def test_status_names_the_price_source_and_market_state():
+    s = full_state()
+    s.apply_index(83880.00, NOW)
+    assert "price: index 0s ago" in render_status(s, NOW, "dark").plain
+    assert "price: index" not in render_status(full_state(), NOW, "dark").plain
+    s.apply_tick(LiveTick(MARKET_SLUG.format(LIVE), 0.5, 0.49, 0.51, 0.5, 10.0, state="MARKET_STATE_HALTED"), NOW)
+    assert "market halted" in render_status(s, NOW, "dark").plain

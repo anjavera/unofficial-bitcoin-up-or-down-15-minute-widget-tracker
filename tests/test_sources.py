@@ -133,3 +133,11 @@ def test_use_keys_false_forces_keyless_even_when_keys_exist(monkeypatch):
         assert ds.mode == "keyless" and feed_type(ds) == "PollingFeed"
     finally:
         ds.close()
+
+
+def test_default_sources_include_the_index_fetcher(monkeypatch):
+    monkeypatch.delenv("POLYMARKET_KEY_ID", raising=False)
+    monkeypatch.delenv("POLYMARKET_SECRET_KEY", raising=False)
+    monkeypatch.setattr(client, "load_dotenv", lambda *a, **k: False)
+    from btc15_widget.index import fetch_index
+    assert default_sources(use_keys=False).fetch_index is fetch_index

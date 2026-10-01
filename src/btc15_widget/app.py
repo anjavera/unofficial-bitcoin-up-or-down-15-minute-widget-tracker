@@ -17,7 +17,7 @@ from textual.widgets import Static
 from btc15_widget.colors import BACKGROUND
 from btc15_widget.panel import panel_layout, render_coin
 from btc15_widget.render import build_table, render_header, render_legend, render_status, render_strip, split_table
-from btc15_widget.sources import CALIBRATION_EVERY, QUOTES_EVERY, DataSources, default_sources, run_calibration
+from btc15_widget.sources import CALIBRATION_EVERY, INDEX_EVERY, QUOTES_EVERY, DataSources, default_sources, run_calibration
 from btc15_widget.state import WidgetState
 from btc15_widget.textio import ensure_utf8_output
 from btc15_widget.windows import floor_window, seconds_remaining
@@ -54,7 +54,7 @@ def _plain(renderable, width: int = 100) -> str:
 
 def _table(state: WidgetState, now: datetime, theme: str):
     return build_table(state.table_windows(now), theme, volume=False,
-                       live_start=floor_window(now), live_price=state.proxy_price(now))
+                       live_start=floor_window(now), live_price=state.live_price(now))
 
 
 def snapshot_text(state: WidgetState, now: datetime, theme: str, view: str = "table") -> str:
@@ -125,6 +125,7 @@ class WidgetApp(App):
         if self._sources is not None:
             self._start_history_load()
             threading.Thread(target=self._poll_quotes, daemon=True, name="btc15-quotes").start()
+            threading.Thread(target=self._poll_index, daemon=True, name="btc15-index").start()
             self.run_worker(self._run_feed(), exit_on_error=False, group="feed")
         self.set_interval(1.0, self._on_second)
 
@@ -197,6 +198,16 @@ class WidgetApp(App):
             except Exception:
                 pass  # a failed poll just leaves the last quotes to go stale
             self._stop.wait(QUOTES_EVERY)
+
+    def _poll_index(self) -> None:
+        while not self._stop.is_set():
+            try:
+                result = self._sources.fetch_index()
+                if result is not None:
+                    self._apply(self.state.apply_index, result[0], self.clock())
+            except Exception:
+                pass  # falls back to the exchange proxy once the last index price goes stale
+            self._stop.wait(INDEX_EVERY)
 
     async def _run_feed(self) -> None:
         feed = self._sources.feed_factory(lambda tick: self.state.apply_tick(tick, self.clock()))
@@ -297,6 +308,9 @@ def _print_snapshot(sources: DataSources, clock: Callable[[], datetime]) -> None
     state, now = WidgetState(), clock()
     state.set_history(sources.load_history(now), now)
     state.apply_quotes(sources.fetch_quotes(), clock())
+    index = sources.fetch_index()
+    if index is not None:
+        state.apply_index(index[0], clock())
     run_calibration(state, sources, now)
     if not state.live_market_missing(now):  # with no market published there is nothing to listen to
         asyncio.run(_collect_tick(sources, state, clock))

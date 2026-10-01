@@ -180,3 +180,34 @@ def test_a_missing_live_market_is_rechecked_every_20_seconds():
     assert not s.needs_history_refresh(NOW)
     s.set_history(ws, NOW - timedelta(seconds=25))
     assert s.needs_history_refresh(NOW)  # so the widget notices the moment Polymarket publishes the window
+
+
+def test_index_price_is_preferred_over_the_proxy_and_not_bias_adjusted():
+    s = quotes_state(Calibration(n=8, bias=-4.0, mean_abs_error=4.0, max_abs_error=9.0))
+    s.apply_index(200.0, NOW)
+    assert s.live_price(NOW) == 200.0 and s.price_source(NOW) == "index"
+    assert s.gap(NOW) == 200.0 - s.live_window(NOW).open
+
+
+def test_falls_back_to_the_proxy_when_the_index_is_stale_or_missing():
+    s = quotes_state()
+    assert s.live_price(NOW) == 101.0 and s.price_source(NOW) == "proxy"
+    s.apply_index(200.0, NOW - timedelta(seconds=STALE_SECONDS + 1))
+    assert s.live_price(NOW) == 101.0 and s.price_source(NOW) == "proxy"
+
+
+def test_no_price_when_both_sources_are_missing():
+    s = state_with()
+    assert s.live_price(NOW) is None and s.price_source(NOW) is None
+
+
+def test_market_state_label():
+    s = state_with()
+    slug = MARKET_SLUG.format(floor_window(NOW))
+    assert s.market_state_label(NOW) is None
+    s.apply_tick(LiveTick(slug, 0.5, 0.49, 0.51, 0.5, 10.0, state="MARKET_STATE_OPEN"), NOW)
+    assert s.market_state_label(NOW) is None
+    s.apply_tick(LiveTick(slug, 0.5, 0.49, 0.51, 0.5, 10.0, state="MARKET_STATE_HALTED"), NOW)
+    assert s.market_state_label(NOW) == "halted"
+    s.apply_tick(LiveTick(slug, 0.5, 0.49, 0.51, 0.5, 10.0, state="MARKET_STATE_SUSPENDED"), NOW)
+    assert s.market_state_label(NOW) == "suspended"

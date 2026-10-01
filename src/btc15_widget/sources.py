@@ -8,11 +8,13 @@ from btc15_widget.calibration import Calibration, fetch_candles, measure
 from btc15_widget.client import get_public_client, has_credentials
 from btc15_widget.feed import LiveFeed, PollingFeed
 from btc15_widget.history import HISTORY_CACHE, load_history
+from btc15_widget.index import fetch_index
 from btc15_widget.model import LiveTick, Window
 from btc15_widget.proxy import fetch_quotes
 from btc15_widget.state import WidgetState
 
-QUOTES_EVERY = 2.0  # seconds between exchange quote polls
+QUOTES_EVERY = 2.0
+INDEX_EVERY = 1.0  # the index publishes about once a second  # seconds between exchange quote polls
 CALIBRATION_EVERY = 1800  # seconds between calibration runs
 CALIBRATION_HOURS = 4  # keeps the candle range under Coinbase's 300-candle cap
 
@@ -24,6 +26,7 @@ class DataSources:
     fetch_candles: Callable[[datetime, datetime], dict]
     feed_factory: Callable[[Callable[[LiveTick], None]], PollingFeed | LiveFeed | None]
     close: Callable[[], None] = lambda: None
+    fetch_index: Callable[[], tuple[float, int] | None] = lambda: None  # official index; None = unavailable
     mode: str = "keyless"  # "keyed" when the user's own API keys are in use
 
 
@@ -38,8 +41,11 @@ def default_sources(use_keys: bool = True) -> DataSources:
     return DataSources(
         load_history=lambda now: load_history(api, now, hours=24, cache_path=HISTORY_CACHE, with_volume=False),
         fetch_quotes=fetch_quotes,
+        fetch_index=fetch_index,
         fetch_candles=fetch_candles,
-        feed_factory=(lambda on_tick: LiveFeed(on_tick)) if keyed else (lambda on_tick: PollingFeed(on_tick, api.markets.book)),
+        feed_factory=(lambda on_tick: LiveFeed(on_tick)) if keyed else (lambda on_tick: PollingFeed(
+            on_tick, api.markets.book, fetch_bbo=api.markets.bbo,
+            fetch_event=lambda slug: api.events.list({"slug": [slug.removeprefix("cpc-")], "limit": 1}))),
         close=api.close,
         mode="keyed" if keyed else "keyless",
     )

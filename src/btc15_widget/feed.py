@@ -13,7 +13,7 @@ from polymarket_us.websocket import MarketsWebSocket
 
 from btc15_widget.client import load_credentials
 from btc15_widget.model import LiveTick
-from btc15_widget.windows import MARKET_SLUG, floor_window, window_slugs
+from btc15_widget.windows import MARKET_SLUG, event_slug, floor_window, window_slugs
 
 POLL_EVERY = 2.0  # seconds between price polls
 MAX_BACKOFF = 60
@@ -41,6 +41,7 @@ def parse_lite(message: dict) -> LiveTick | None:
         best_ask=_px(data.get("bestAsk")),
         last_trade=_px(data.get("lastTradePx")),
         shares_traded=float(shares) if shares else None,
+        state=data.get("state"),
     )
 
 
@@ -63,7 +64,42 @@ def parse_book(response) -> LiveTick:
     shares = stats.get("sharesTraded")
     mid = (best_bid + best_ask) / 2 if best_bid is not None and best_ask is not None else last
     return LiveTick(slug=slug, up_price=mid, best_bid=best_bid, best_ask=best_ask, last_trade=last,
-                    shares_traded=float(shares) if shares else None)
+                    shares_traded=float(shares) if shares else None, state=data.get("state"))
+
+
+def parse_bbo(response) -> LiveTick:
+    """A LiveTick from a `markets.bbo` response (lightweight quote); ValueError when not shaped as expected."""
+    try:
+        data = response["marketData"]
+        slug = data["marketSlug"]
+    except (KeyError, TypeError) as e:
+        raise ValueError(f"unexpected bbo response: {str(response)[:80]}") from e
+    bid, ask, last = _px(data.get("bestBid")), _px(data.get("bestAsk")), _px(data.get("lastTradePx"))
+    mid = (bid + ask) / 2 if bid is not None and ask is not None else _px(data.get("currentPx"))
+    shares = data.get("sharesTraded")
+    return LiveTick(slug=slug, up_price=mid, best_bid=bid, best_ask=ask, last_trade=last,
+                    shares_traded=float(shares) if shares else None, state=data.get("state"))
+
+
+class NoQuote(Exception):
+    """The event record has no market or no bid/ask for this window (treated like a missing market)."""
+
+
+def parse_event_quote(response, slug: str) -> LiveTick:
+    """A LiveTick from an `events.list` response, which quotes a new window before its book or bbo exist.
+
+    Raises NoQuote when the event or its market is absent or has no quote.
+    """
+    try:
+        market = next(m for e in response["events"] for m in e.get("markets") or [] if m.get("slug") == slug)
+    except (KeyError, TypeError, StopIteration) as e:
+        raise NoQuote(slug) from e
+    bid, ask = _px(market.get("bestBidQuote")), _px(market.get("bestAskQuote"))
+    if bid is None or ask is None:
+        raise NoQuote(slug)
+    status = market.get("status", "")
+    return LiveTick(slug=slug, up_price=(bid + ask) / 2, best_bid=bid, best_ask=ask, last_trade=None, shares_traded=None,
+                    state="MARKET_STATE_OPEN" if status == "MARKET_STATUS_OPEN" else None)
 
 
 async def wait_or_stop(delay: float, stop: asyncio.Event) -> None:
@@ -78,16 +114,37 @@ class PollingFeed:
     """Polls the live window's order book every couple of seconds and reports each price as a LiveTick."""
 
     def __init__(self, on_tick: Callable[[LiveTick], None], fetch_book: Callable[[str], dict], interval: float = POLL_EVERY,
-                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc), sleep=wait_or_stop) -> None:
+                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc), sleep=wait_or_stop,
+                 fetch_bbo: Callable[[str], dict] | None = None, fetch_event: Callable[[str], dict] | None = None) -> None:
         self.on_tick, self._fetch, self._interval, self._clock, self._sleep = on_tick, fetch_book, interval, clock, sleep
+        self._fetch_bbo, self._fetch_event = fetch_bbo, fetch_event
+
+    async def _tick(self, slug: str) -> LiveTick:
+        """The best quote available: the full book, else bbo, else the event's quote.
+
+        Polymarket publishes a new window's book and bbo about two minutes after it opens, but its event record
+        (with best bid/ask) is there straight away, so the widget never has to sit without odds at a rollover.
+        """
+        attempts = [(parse_book, self._fetch, ())]
+        if self._fetch_bbo:
+            attempts.append((parse_bbo, self._fetch_bbo, ()))
+        if self._fetch_event:
+            attempts.append((lambda r: parse_event_quote(r, slug), self._fetch_event, ()))
+        missing = None
+        for parse, fetch, _ in attempts:
+            try:
+                return parse(await asyncio.to_thread(fetch, slug))
+            except (NotFoundError, NoQuote) as e:  # not published yet: try the next, lighter source
+                missing = missing or e
+        raise missing
 
     async def run(self, stop: asyncio.Event) -> None:
         failures = 0
         while not stop.is_set():
             slug = MARKET_SLUG.format(floor_window(self._clock()))  # re-read each time: follows the rollover
             try:
-                tick = parse_book(await asyncio.to_thread(self._fetch, slug))
-            except NotFoundError:  # no market published for this window: check again gently, this is not an outage
+                tick = await self._tick(slug)
+            except (NotFoundError, NoQuote):  # no market published for this window: check again gently, this is not an outage
                 delay = NO_MARKET_RETRY
             except Exception:  # network error, rate limit or odd response: back off and keep going
                 failures += 1
