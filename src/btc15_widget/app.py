@@ -29,6 +29,15 @@ FOREGROUND = "#e6edf3"
 RETRY_FAILED_LOAD_AFTER = timedelta(seconds=30)
 
 
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+
+        return version("btc15-widget")
+    except Exception:  # not installed as a package (e.g. some frozen builds)
+        return "unknown"
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -302,6 +311,7 @@ def main(argv: list[str] | None = None, sources: DataSources | None = None,
     ensure_utf8_output()
     parser = argparse.ArgumentParser(prog="btc15-widget", description="Live BTC 15-minute Up/Down terminal widget")
     parser.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
+    parser.add_argument("--version", action="version", version=f"btc15-widget {_version()}")
     parser.add_argument("--keyless", action="store_true", help="ignore any API keys and use public data only")
     args = parser.parse_args(argv)
     if not args.snapshot:

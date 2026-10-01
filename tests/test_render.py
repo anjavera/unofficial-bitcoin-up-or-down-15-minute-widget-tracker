@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+import io
 import pytest
 from rich.color import Color
 from rich.console import Console
@@ -213,7 +214,7 @@ def test_table_without_volume_fits_80_columns():
     ws = [Window(T0 + timedelta(minutes=15 * i), open=99000.12, close=100123.45) for i in range(5)]
     ws.append(Window(T0 + timedelta(minutes=75), open=99000.12, close=None, status="OPEN"))
     table = build_table(ws, "dark", volume=False, live_start=ws[-1].start, live_price=100123.45)
-    console = Console(width=200, record=True, file=open("/dev/null", "w"))
+    console = Console(width=200, record=True, file=io.StringIO())
     console.print(table)
     assert max(len(line) for line in console.export_text().split("\n")) <= 80
 

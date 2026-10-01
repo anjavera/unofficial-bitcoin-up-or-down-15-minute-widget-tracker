@@ -1,0 +1,71 @@
+name: Release
+
+# Builds the standalone apps (no Python needed) and attaches them to a GitHub Release.
+# Run by pushing a version tag, e.g.:  git tag v0.1.0 && git push origin v0.1.0
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.asset }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: btc15-widget-linux-x86_64
+            exe: btc15-widget
+          - os: macos-latest
+            asset: btc15-widget-macos-arm64
+            exe: btc15-widget
+          - os: windows-latest
+            asset: btc15-widget-windows-x86_64.exe
+            exe: btc15-widget.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - name: Build the standalone app
+        run: >
+          uv run --with pyinstaller pyinstaller --onefile --name btc15-widget
+          --collect-all textual --collect-submodules btc15_widget
+          --copy-metadata polymarket-us --copy-metadata btc15-widget
+          --hidden-import _cffi_backend --collect-all nacl --collect-all cffi
+          packaging/btc15_app.py
+      - name: Smoke test (no network)
+        shell: bash
+        run: ./dist/${{ matrix.exe }} --version
+      - name: Name the file for the release page
+        shell: bash
+        run: mv "dist/${{ matrix.exe }}" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Add the Linux installer
+        run: cp packaging/linux/install.sh packaging/linux/icon.png assets/
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" assets/*
+          --title "BTC 15m widget $GITHUB_REF_NAME"
+          --notes "Unofficial live tracker for Polymarket US BTC Up or Down 15-minute markets. Download the file for your system and run it; no Python needed. These builds are not code-signed, so Windows and macOS will warn the first time: see the README for the steps."

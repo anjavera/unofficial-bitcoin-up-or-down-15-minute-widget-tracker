@@ -7,8 +7,26 @@ a live BTC price and a countdown.
 > **Unofficial.** Not affiliated with, endorsed by, or connected to Polymarket or CF Benchmarks.
 > Read-only market data. Nothing here places orders, and nothing here is financial advice.
 
-**Status:** core library, `pm` CLI and the terminal widget implemented; desktop window and shortcut not started. See
+**Status:** works today as a terminal app on Linux (tested here); Windows and macOS builds are produced by
+automated checks and have not been tried by hand yet. See
 [`docs/superpowers/specs/2026-09-30-btc15-widget-design.md`](docs/superpowers/specs/2026-09-30-btc15-widget-design.md).
+
+## Install (no Python needed)
+
+Download the file for your computer from the [Releases page](../../releases/latest) and run it. It opens a
+window with the live widget; press **q** to quit. The window needs to be at least 80 columns by 16 rows.
+
+| Your computer | Download | How to start it |
+|---|---|---|
+| **Windows** | `btc15-widget-windows-x86_64.exe` | Double-click it. Windows may say it "protected your PC" because the app is not code-signed: click **More info**, then **Run anyway**. |
+| **Mac** (Apple Silicon) | `btc15-widget-macos-arm64` | Open Terminal, then run `chmod +x ~/Downloads/btc15-widget-macos-arm64 && ~/Downloads/btc15-widget-macos-arm64`. If macOS blocks it, open **System Settings > Privacy & Security** and choose **Open Anyway**. |
+| **Linux** | `btc15-widget-linux-x86_64` + `install.sh` | In the download folder run `sh install.sh`. This adds **BTC 15m Widget** to your app menu (it opens in a terminal window). |
+
+The apps are not code-signed (that needs paid developer accounts), which is why Windows and macOS warn once.
+If something does not work on your system, please [open an issue](../../issues) with what you saw.
+
+**Already use Python?** `uv tool install git+https://github.com/anjavera/unofficial-bitcoin-up-or-down-15-minute-widget-tracker`
+then run `btc15-widget`.
 
 ## No API keys needed
 

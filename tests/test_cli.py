@@ -1,3 +1,4 @@
+import io
 import json
 from datetime import datetime, timezone
 
@@ -154,7 +155,7 @@ def test_volume_column_is_hidden_when_nobody_fetched_volume(capsys):
     from rich.console import Console as RichConsole
     import btc15_widget.render as render_module
 
-    wide = RichConsole(width=200, record=True, file=open("/dev/null", "w"))
+    wide = RichConsole(width=200, record=True, file=io.StringIO())
     render_module.Console = lambda: wide  # print_table builds its own Console; give it a wide one
     try:
         render_module.print_table(no_volume)

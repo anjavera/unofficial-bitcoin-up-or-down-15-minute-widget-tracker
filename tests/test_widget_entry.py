@@ -126,3 +126,10 @@ def test_snapshot_explains_a_missing_live_market_without_waiting_for_a_tick(tmp_
     run_main(["--snapshot"], tmp_path, sources)
     assert time.monotonic() - started < 3  # the 5 s tick timeout is skipped when there is no market to listen to
     assert "feed: no market yet" in capsys.readouterr().out
+
+
+def test_version_flag_prints_the_version_and_exits(capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        app_module.main(["--version"])
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.strip().startswith("btc15-widget ")
