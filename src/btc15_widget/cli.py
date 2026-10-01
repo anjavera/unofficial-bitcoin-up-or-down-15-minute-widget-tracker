@@ -9,7 +9,7 @@ import sys
 from datetime import datetime, timezone
 
 
-from btc15_widget.client import get_client
+from btc15_widget.client import get_client, get_public_client
 from btc15_widget.history import HISTORY_CACHE, load_history
 from btc15_widget.model import Window
 from btc15_widget.render import build_table, print_table  # noqa: F401  (re-exported for callers and tests)
@@ -136,10 +136,14 @@ def windows_to_json(windows: list[Window]) -> list[dict]:
 
 
 def cmd_btc15(client, args):
-    windows = load_history(client, datetime.now(timezone.utc), hours=args.hours, cache_path=HISTORY_CACHE)
+    windows = load_history(client, datetime.now(timezone.utc), hours=args.hours, cache_path=HISTORY_CACHE,
+                           with_volume=args.volume)
     if args.json:
         return windows_to_json(windows)
     print_table(windows)
+
+
+AUTH_COMMANDS = {"account", "balances", "positions", "orders"}  # the only commands that need API keys
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -161,8 +165,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("widget", help="live terminal widget for the BTC 15-minute markets")
     p.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
 
-    p = sub.add_parser("btc15", help="recent BTC 15-minute Up/Down windows")
+    p = sub.add_parser("btc15", help="recent BTC 15-minute Up/Down windows (no API keys needed)")
     p.add_argument("--hours", type=float, default=6)
+    p.add_argument("--volume", action="store_true", help="also fetch each window's volume (slower)")
     p.set_defaults(func=cmd_btc15)
 
     for name, func, help_text in [
@@ -188,7 +193,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     client = None
     try:
-        client = get_client()
+        client = get_client() if args.command in AUTH_COMMANDS else get_public_client()
         result = args.func(client, args)
     except Exception as e:
         msg = str(e)

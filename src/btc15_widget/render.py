@@ -218,7 +218,8 @@ def split_table(table: Table) -> tuple[Text, Text]:
 def print_table(windows: list[Window], theme: str = "dark") -> None:
     console = Console()
     console.print("BTC 15-min Up/Down — all times ET, prices are BRTI (Chg columns: blue = up, orange = down)", style="bold")
-    console.print(build_table(windows, theme, volume=console.width >= VOLUME_MIN_TERMINAL_WIDTH))
+    show_volume = console.width >= VOLUME_MIN_TERMINAL_WIDTH and any(w.volume for w in windows)
+    console.print(build_table(windows, theme, volume=show_volume))
     settled = [w for w in windows if w.settled]
     ups = sum(w.result == "UP" for w in windows)
     downs = sum(w.result == "DOWN" for w in windows)

@@ -10,16 +10,18 @@ a live BTC price and a countdown.
 **Status:** core library, `pm` CLI and the terminal widget implemented; desktop window and shortcut not started. See
 [`docs/superpowers/specs/2026-09-30-btc15-widget-design.md`](docs/superpowers/specs/2026-09-30-btc15-widget-design.md).
 
-## Credentials
+## No API keys needed
 
-Polymarket US API keys are read from a local `.env` (`POLYMARKET_KEY_ID`, `POLYMARKET_SECRET_KEY`).
-`.env` is git-ignored. Never commit it.
+The live widget and `pm btc15` read only **public** Polymarket US data and public exchange prices, so there is
+nothing to sign up for or configure. API keys are needed only for the optional account commands
+(`pm account`, `balances`, `positions`, `orders`) and the recorder: put them in a local `.env`
+(`POLYMARKET_KEY_ID`, `POLYMARKET_SECRET_KEY`). `.env` is git-ignored. Never commit it.
 
 ## Usage
 
 ```
 uv sync
-uv run pm btc15 --hours 6     # one-shot styled table, last 6 hours
+uv run pm btc15 --hours 6     # one-shot styled table, last 6 hours (add --volume for volumes; slower)
 uv run btc15-widget           # live widget: ticker + styled 24h table + colour key;
                               #   on terminals >=116 columns x 28 rows an ASCII coin appears whose ring is the analog countdown
                               #   (orange = time left, green/red = time used, by the current lean)
@@ -30,6 +32,6 @@ uv run pytest                 # tests
 
 Commands: see `CLAUDE.md`. Plans: `docs/superpowers/plans/`.
 
-First run fetches 24 hours of history (a few minutes); later runs reuse a local cache and start in seconds.
+History for the last 24 hours loads in about a second with one request, and settled windows are cached locally.
 The live price is an exchange-composite estimate (≈), not CF Benchmarks BRTI. Windows are coloured from real
 settled BRTI; the live window is provisional.

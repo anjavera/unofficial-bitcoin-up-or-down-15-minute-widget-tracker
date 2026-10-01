@@ -24,3 +24,14 @@ def test_credentials_returned_from_env(monkeypatch):
     monkeypatch.setenv("POLYMARKET_SECRET_KEY", "secret")
     monkeypatch.setattr(client, "load_dotenv", lambda *a, **k: False)
     assert client.load_credentials() == ("id", "secret")
+
+
+def test_public_client_needs_no_credentials(monkeypatch):
+    monkeypatch.delenv("POLYMARKET_KEY_ID", raising=False)
+    monkeypatch.delenv("POLYMARKET_SECRET_KEY", raising=False)
+    monkeypatch.setattr(client, "load_dotenv", lambda *a, **k: False)
+    api = client.get_public_client()
+    try:
+        assert hasattr(api.events, "list") and hasattr(api.markets, "book")
+    finally:
+        api.close()

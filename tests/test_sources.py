@@ -44,12 +44,15 @@ def test_constants():
     assert CALIBRATION_EVERY == 1800 and QUOTES_EVERY == 2.0
 
 
-def test_default_sources_needs_credentials(monkeypatch):
+def test_default_sources_need_no_credentials(monkeypatch):
     monkeypatch.delenv("POLYMARKET_KEY_ID", raising=False)
     monkeypatch.delenv("POLYMARKET_SECRET_KEY", raising=False)
     monkeypatch.setattr(client, "load_dotenv", lambda *a, **k: False)
-    with pytest.raises(RuntimeError, match="POLYMARKET_KEY_ID"):
-        default_sources()
+    sources = default_sources()  # must not raise: the widget reads only public data
+    try:
+        assert callable(sources.load_history) and callable(sources.fetch_quotes) and callable(sources.feed_factory)
+    finally:
+        sources.close()
 
 
 def test_run_calibration_uses_last_four_hours():
@@ -77,18 +80,19 @@ def test_run_calibration_with_no_usable_data_returns_none():
     assert state.calibration is None
 
 
-def test_widget_uses_its_own_cache_and_skips_volume(monkeypatch, tmp_path):
+def test_widget_history_skips_volume_and_shares_the_cli_cache(monkeypatch):
     from btc15_widget import sources as sources_module
+    from btc15_widget.history import HISTORY_CACHE
 
     seen = {}
 
     class FakeApi:
+        markets = type("M", (), {"book": staticmethod(lambda slug: {})})()
+
         def close(self):
             pass
 
-    monkeypatch.setattr(sources_module, "get_client", lambda: FakeApi())
+    monkeypatch.setattr(sources_module, "get_public_client", lambda: FakeApi())
     monkeypatch.setattr(sources_module, "load_history", lambda api, now, **kw: seen.update(kw) or [])
     default_sources().load_history(NOW)
-    assert seen["with_volume"] is False
-    assert seen["cache_path"] == sources_module.WIDGET_HISTORY_CACHE
-    assert sources_module.WIDGET_HISTORY_CACHE != sources_module.HISTORY_CACHE  # the CLI cache keeps volumes
+    assert seen["with_volume"] is False and seen["cache_path"] == HISTORY_CACHE
