@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 
 from btc15_widget.client import get_client
-from btc15_widget.dashboard.discovery import DEFAULT_CATEGORIES, DEFAULT_PER_CATEGORY
 from btc15_widget.history import HISTORY_CACHE, load_history
 from btc15_widget.model import Window
 from btc15_widget.render import build_table, print_table  # noqa: F401  (re-exported for callers and tests)
@@ -143,27 +142,6 @@ def cmd_btc15(client, args):
     print_table(windows)
 
 
-def cmd_watchlist_add(args):
-    from btc15_widget.dashboard.watchlist import Watchlist
-
-    Watchlist().add(args.slug)
-    print(f"pinned {args.slug}")
-
-
-def cmd_watchlist_remove(args):
-    from btc15_widget.dashboard.watchlist import Watchlist
-
-    Watchlist().remove(args.slug)
-    print(f"unpinned {args.slug}")
-
-
-def cmd_watchlist_list(args):
-    from btc15_widget.dashboard.watchlist import Watchlist
-
-    slugs = list(Watchlist())
-    print("watchlist is empty" if not slugs else "\n".join(slugs))
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pm", description="Live Polymarket US data (read-only)")
     parser.add_argument("--json", action="store_true", help="print the raw API response")
@@ -187,18 +165,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--hours", type=float, default=6)
     p.set_defaults(func=cmd_btc15)
 
-    p = sub.add_parser("dashboard", help="live multi-market dashboard: crypto/sports/politics side by side")
-    p.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
-    p.add_argument("--categories", default=",".join(DEFAULT_CATEGORIES),
-                    help="comma-separated categories, e.g. crypto,sports,politics")
-    p.add_argument("--per-category", type=int, default=DEFAULT_PER_CATEGORY, help="top markets to show per category")
-
-    p = sub.add_parser("watchlist", help="pin/unpin markets shown first in the dashboard")
-    watch_sub = p.add_subparsers(dest="watchlist_command", required=True)
-    wp = watch_sub.add_parser("add", help="pin a market slug"); wp.add_argument("slug"); wp.set_defaults(func=cmd_watchlist_add)
-    wp = watch_sub.add_parser("remove", help="unpin a market slug"); wp.add_argument("slug"); wp.set_defaults(func=cmd_watchlist_remove)
-    wp = watch_sub.add_parser("list", help="list pinned market slugs"); wp.set_defaults(func=cmd_watchlist_list)
-
     for name, func, help_text in [
         ("price", cmd_price, "best bid/ask and last trade"),
         ("book", cmd_book, "order book"),
@@ -219,17 +185,6 @@ def main(argv: list[str] | None = None) -> None:
         from btc15_widget import app
 
         app.main(["--snapshot"] if args.snapshot else [])
-        return
-    if args.command == "dashboard":  # same reasoning: the dashboard builds and reports on its own client
-        from btc15_widget.dashboard import app as dashboard_app
-
-        argv2 = ["--categories", args.categories, "--per-category", str(args.per_category)]
-        if args.snapshot:
-            argv2.append("--snapshot")
-        dashboard_app.main(argv2)
-        return
-    if args.command == "watchlist":  # local file only, no API client needed
-        args.func(args)
         return
     client = None
     try:

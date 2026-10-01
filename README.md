@@ -1,21 +1,14 @@
 # Unofficial Bitcoin Up or Down 15 Minute Widget Tracker
 
-Unofficial terminal tooling for Polymarket US: a live widget for the **"BTC Up or Down: 15 min"** market
-(the last 24 hours of 15-minute windows, colour-coded by result and net change, plus the live window with
-odds, a live BTC price and a countdown), and a **multi-market dashboard** that lists crypto, sports and
-politics markets side by side with live order-book depth and a pinnable watchlist.
+A live widget for Polymarket US's **"BTC Up or Down: 15 min"** markets: the last 24 hours of
+15-minute windows, colour-coded by result and net change, plus the live window with odds,
+a live BTC price and a countdown.
 
 > **Unofficial.** Not affiliated with, endorsed by, or connected to Polymarket or CF Benchmarks.
 > Read-only market data. Nothing here places orders, and nothing here is financial advice.
 
-**Status:** core library, `pm` CLI, the BTC-15 terminal widget and the multi-market dashboard implemented;
-desktop window and shortcut not started. See
+**Status:** core library, `pm` CLI and the terminal widget implemented; desktop window and shortcut not started. See
 [`docs/superpowers/specs/2026-09-30-btc15-widget-design.md`](docs/superpowers/specs/2026-09-30-btc15-widget-design.md).
-
-**Why the dashboard lives in this repo instead of a new one:** it is a direct sequel to the BTC-15 widget —
-same read-only client, same reconnecting-websocket feed pattern, same Textual/rich rendering approach — built
-to compound the credibility of the first widget for a reviewer rather than starting cold. See
-`src/btc15_widget/dashboard/` for the extension (discovery, watchlist, multi-market feed, dashboard app).
 
 ## Credentials
 
@@ -32,9 +25,6 @@ uv run btc15-widget           # live widget: ticker + styled 24h table + colour 
                               #   (orange = time left, green/red = time used, by the current lean)
                               #   q quit · v table/strip view · r refresh · arrows/PgUp/PgDn scroll
 uv run btc15-widget --snapshot  # print one plain-text frame and exit
-uv run market-dashboard       # live multi-market dashboard: crypto/sports/politics, order-book depth, watchlist
-                              #   q quit · w pin/unpin highlighted market · r refresh markets
-uv run pm watchlist add <market-slug>   # pin a market so it always sorts first in the dashboard
 uv run pytest                 # tests
 ```
 
