@@ -19,6 +19,7 @@ from btc15_widget.panel import panel_layout, render_coin
 from btc15_widget.render import build_table, render_header, render_legend, render_status, render_strip, split_table
 from btc15_widget.sources import CALIBRATION_EVERY, QUOTES_EVERY, DataSources, default_sources, run_calibration
 from btc15_widget.state import WidgetState
+from btc15_widget.textio import ensure_utf8_output
 from btc15_widget.windows import floor_window, seconds_remaining
 
 MIN_WIDTH, MIN_HEIGHT = 80, 16  # the widest text block is 80 columns; the stack is about 15 rows
@@ -294,6 +295,7 @@ def _print_snapshot(sources: DataSources, clock: Callable[[], datetime]) -> None
 
 def main(argv: list[str] | None = None, sources: DataSources | None = None,
          clock: Callable[[], datetime] = utcnow) -> None:
+    ensure_utf8_output()
     parser = argparse.ArgumentParser(prog="btc15-widget", description="Live BTC 15-minute Up/Down terminal widget")
     parser.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
     parser.add_argument("--keyless", action="store_true", help="ignore any API keys and use public data only")

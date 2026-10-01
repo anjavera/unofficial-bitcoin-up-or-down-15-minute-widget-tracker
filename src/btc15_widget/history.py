@@ -9,9 +9,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from btc15_widget.model import Window
+from btc15_widget.paths import cache_dir
 from btc15_widget.windows import MARKET_SLUG, event_slug, floor_window
 
-HISTORY_CACHE = Path.home() / ".cache" / "btc15-widget" / "history.json"
+HISTORY_CACHE = cache_dir() / "history.json"
 PAUSE_BETWEEN_FETCHES = 0.4  # stay clear of the Cloudflare 1015 rate limit (per-window paths only)
 BREAKER_AFTER = 3  # consecutive failed windows before later ones are tried once, without backoff
 BULK_CHUNK = 100  # slugs per events.list request

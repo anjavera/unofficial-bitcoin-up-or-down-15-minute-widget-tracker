@@ -1,15 +1,16 @@
 """Polymarket US credentials and client construction (read-only use)."""
 
 import os
-from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 from polymarket_us import PolymarketUS
 
+from btc15_widget.paths import env_file
+
 
 def _read_env() -> tuple[str | None, str | None]:
     load_dotenv(find_dotenv(usecwd=True))
-    load_dotenv(Path.home() / "polymarket-bot" / ".env")
+    load_dotenv(env_file())
     return os.environ.get("POLYMARKET_KEY_ID"), os.environ.get("POLYMARKET_SECRET_KEY")
 
 

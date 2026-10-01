@@ -8,6 +8,8 @@ dependencies = [
     "polymarket-us>=0.1.2",
     "python-dotenv>=1.2.3",
     "textual>=8.2.8",
+    "platformdirs>=4.0",
+    "tzdata>=2024.1",  # Windows has no system timezone database
 ]
 
 [dependency-groups]

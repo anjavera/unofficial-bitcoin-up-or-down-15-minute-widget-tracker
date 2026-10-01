@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from btc15_widget.client import get_client, get_public_client
 from btc15_widget.history import HISTORY_CACHE, load_history
 from btc15_widget.model import Window
+from btc15_widget.textio import ensure_utf8_output
 from btc15_widget.render import build_table, print_table  # noqa: F401  (re-exported for callers and tests)
 
 
@@ -186,6 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    ensure_utf8_output()
     args = build_parser().parse_args(argv)
     if args.command == "widget":  # needs no API client up front: the widget reports credential problems itself
         from btc15_widget import app
