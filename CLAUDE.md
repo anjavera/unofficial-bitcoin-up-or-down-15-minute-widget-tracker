@@ -20,6 +20,13 @@ Run from this directory. Add `--json` before the command for machine-readable ou
     uv run pm btc15 [--hours 6]    # one-shot styled table (Chg $/% blue-orange gradient, Result green/red, volume)
     uv run btc15-widget [--snapshot]   # live widget: ticker, styled table, colour key, ASCII coin = analog countdown on wide terminals (also: uv run pm widget)
                                    # keys: q quit, v table/strip view, r refresh, arrows/PgUp/PgDn scroll
+    uv run market-dashboard [--snapshot] [--categories crypto,sports,politics] [--per-category 8]
+                                   # live multi-market dashboard: discovers top markets per category via
+                                   # client.events.list(categories=...), subscribes SUBSCRIPTION_TYPE_MARKET_DATA
+                                   # (full order book) over /v1/ws/markets for all visible + pinned slugs
+                                   # keys: q quit, w pin/unpin highlighted row, r refresh markets (also: uv run pm dashboard)
+    uv run pm watchlist add|remove|list [<market-slug>]   # pinned markets sort first in the dashboard;
+                                   # persisted at ~/.config/btc15-widget/watchlist.json
     uv run btc15-record --hours 4 --out data/live.jsonl   # record live ticks + trades
     uv run btc15-summarize data/live.jsonl
 
