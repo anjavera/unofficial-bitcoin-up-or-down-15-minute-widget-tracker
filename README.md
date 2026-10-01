@@ -59,8 +59,7 @@ How to get your own keys (from Polymarket US's official docs,
 The widget finds the keys by itself; the status line then shows `feed: live (keyed)`. To ignore your keys and use
 public data only, run `btc15-widget --keyless` (the status line shows `feed: live (keyless)`).
 
-**Keep your keys safe.** Polymarket's docs do not say whether a key can be limited to read-only, so assume a key
-could be used to place orders. `.env` is git-ignored here; never commit it or paste it anywhere. If a key is ever
+**Keep your keys safe.** Polymarket's keys can be used to place orders including other functions involving your money. Treat the keys as if they were the full details to your credit/debit cards. `.env` is git-ignored here; never commit it or paste it anywhere. If a key is ever
 exposed, revoke it at <https://polymarket.us/developer>. This project only reads data and never places orders.
 
 ## Usage
