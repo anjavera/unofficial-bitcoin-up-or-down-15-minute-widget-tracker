@@ -15,7 +15,9 @@ official feed can replace the proxy below later. CF Benchmarks publishes no pric
 access is by licence enquiry. **Decision (owner): no paid data sources for now, so the proxy below is used.**
 
 ## Data
-- **No API keys** are needed for the widget or `pm btc15`; keys only serve account commands and the recorder.
+- **No API keys** are needed for the widget or `pm btc15`. Keys are optional: when the user has set them up the
+  widget uses the authenticated WebSocket feed (`LiveFeed`, status `keyed`); `--keyless` forces the public path.
+  Keys also serve account commands and the recorder.
 - **History (exact):** settled windows from Polymarket, addressed by slug
   `btc-updown-15m-YYYY-MM-DD-HHMMz` (market slug prefixed `cpc-`). Cached locally; only new windows fetched.
 - **Live Polymarket (keyless, updated 2026-10-01):** poll the public order book (`markets.book`) every 2 s for the

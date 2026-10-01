@@ -1,14 +1,23 @@
-"""Live Polymarket US prices for the current 15-minute window, polled from the public order book (no keys)."""
+"""Live Polymarket US prices for the BTC 15m markets.
+
+Two interchangeable feeds: `PollingFeed` polls the public order book and needs no API keys; `LiveFeed` uses the
+authenticated WebSocket (push updates) and is used automatically when the user has set up API keys.
+"""
 
 import asyncio
 from collections.abc import Callable
 from datetime import datetime, timezone
 
+from polymarket_us.websocket import MarketsWebSocket
+
+from btc15_widget.client import load_credentials
 from btc15_widget.model import LiveTick
-from btc15_widget.windows import MARKET_SLUG, floor_window
+from btc15_widget.windows import MARKET_SLUG, floor_window, window_slugs
 
 POLL_EVERY = 2.0  # seconds between price polls
 MAX_BACKOFF = 60
+SESSION_SECONDS = 3600  # keyed feed: re-subscribe hourly so the window list stays current
+WINDOWS_TO_FOLLOW = 6  # must cover SESSION_SECONDS plus the rest of the current window
 
 
 def _px(d) -> float | None:
@@ -16,6 +25,22 @@ def _px(d) -> float | None:
         return float(d["value"])
     except (TypeError, KeyError, ValueError):
         return None
+
+
+def parse_lite(message: dict) -> LiveTick | None:
+    data = message.get("marketDataLite")
+    if not data:
+        return None
+    shares = data.get("sharesTraded")
+    return LiveTick(
+        slug=data["marketSlug"],
+        up_price=_px(data.get("currentPx")),
+        best_bid=_px(data.get("bestBid")),
+        best_ask=_px(data.get("bestAsk")),
+        last_trade=_px(data.get("lastTradePx")),
+        shares_traded=float(shares) if shares else None,
+    )
+
 
 
 def parse_book(response) -> LiveTick:
@@ -67,3 +92,46 @@ class PollingFeed:
                 failures, delay = 0, self._interval
                 self.on_tick(tick)
             await self._sleep(delay, stop)
+
+
+class LiveFeed:
+    def __init__(self, on_tick: Callable[[LiveTick], None], ws_factory=MarketsWebSocket,
+                 creds: tuple[str, str] | None = None, sleep=wait_or_stop) -> None:
+        self.on_tick, self._factory, self._creds, self._sleep = on_tick, ws_factory, creds, sleep
+
+    async def run(self, stop: asyncio.Event) -> None:
+        creds = self._creds or load_credentials()
+        failures = 0
+        while not stop.is_set():
+            dropped = asyncio.Event()
+            ws = self._factory(key_id=creds[0], secret_key=creds[1])
+
+            def on_message(message: dict) -> None:
+                tick = parse_lite(message)
+                if tick:
+                    self.on_tick(tick)
+
+            ws.on("message", on_message)
+            ws.on("close", dropped.set)
+            ws.on("error", lambda _e: dropped.set())  # the SDK ends its read loop on errors
+            try:
+                await ws.connect()
+                await ws.subscribe_market_data_lite("lite", window_slugs(datetime.now(timezone.utc), WINDOWS_TO_FOLLOW))
+                waiters = {asyncio.ensure_future(dropped.wait()), asyncio.ensure_future(stop.wait())}
+                _, pending = await asyncio.wait(waiters, timeout=SESSION_SECONDS, return_when=asyncio.FIRST_COMPLETED)
+                for task in pending:
+                    task.cancel()
+                timed_out = not dropped.is_set() and not stop.is_set()
+            except Exception:
+                timed_out = False
+            finally:
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
+            if stop.is_set():
+                return
+            failures = 0 if timed_out else failures + 1  # any early drop backs off, even after a tick
+            if not timed_out:
+                await self._sleep(min(5 * failures, 60), stop)
+

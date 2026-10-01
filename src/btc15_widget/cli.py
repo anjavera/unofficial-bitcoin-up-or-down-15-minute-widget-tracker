@@ -164,6 +164,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("widget", help="live terminal widget for the BTC 15-minute markets")
     p.add_argument("--snapshot", action="store_true", help="print one plain-text frame and exit")
+    p.add_argument("--keyless", action="store_true", help="ignore any API keys and use public data only")
 
     p = sub.add_parser("btc15", help="recent BTC 15-minute Up/Down windows (no API keys needed)")
     p.add_argument("--hours", type=float, default=6)
@@ -189,7 +190,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.command == "widget":  # needs no API client up front: the widget reports credential problems itself
         from btc15_widget import app
 
-        app.main(["--snapshot"] if args.snapshot else [])
+        app.main((["--snapshot"] if args.snapshot else []) + (["--keyless"] if args.keyless else []))
         return
     client = None
     try:

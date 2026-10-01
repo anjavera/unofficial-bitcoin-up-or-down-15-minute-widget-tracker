@@ -123,7 +123,8 @@ def render_header(state: WidgetState, now: datetime, theme: str) -> Text:
 
 def render_status(state: WidgetState, now: datetime, theme: str) -> Text:
     age = "—" if state.quotes_at is None else f"{max(0, int((now - state.quotes_at).total_seconds()))}s ago"
-    text = Text(f"feed: {state.feed_status} · quotes {age}  ", style=DIM)
+    mode = f" ({state.feed_mode})" if state.feed_mode else ""
+    text = Text(f"feed: {state.feed_status}{mode} · quotes {age}  ", style=DIM)
     text.append("Signals: off (see data/patterns.md)", style=DIM)
     if state.loading and not state.windows:
         text.append("\nloading 24h history… (first run takes a few minutes; later runs are cached)")

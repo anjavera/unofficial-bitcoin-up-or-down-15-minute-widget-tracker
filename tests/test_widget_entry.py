@@ -56,7 +56,7 @@ def test_theme_option_is_gone(tmp_path, capsys):
 
 
 def test_missing_credentials_message(tmp_path, capsys, monkeypatch):
-    def no_creds():
+    def no_creds(**kwargs):
         raise RuntimeError("Missing POLYMARKET_KEY_ID / POLYMARKET_SECRET_KEY")
 
     monkeypatch.setattr(app_module, "default_sources", no_creds)
@@ -81,3 +81,23 @@ def test_pm_widget_delegates_without_needing_a_client(monkeypatch):
 def test_pm_widget_has_no_theme_option():
     with pytest.raises(SystemExit):
         cli.build_parser().parse_args(["widget", "--theme", "dark"])
+
+
+def test_keyless_flag_tells_default_sources_to_ignore_keys(tmp_path, monkeypatch, capsys):
+    seen = []
+
+    def fake_default(**kwargs):
+        seen.append(kwargs)
+        return fake_sources()
+
+    monkeypatch.setattr(app_module, "default_sources", fake_default)
+    run_main(["--snapshot"], tmp_path, None)
+    run_main(["--snapshot", "--keyless"], tmp_path, None)
+    assert seen == [{"use_keys": True}, {"use_keys": False}]
+
+
+def test_pm_widget_passes_keyless_through(monkeypatch):
+    seen = []
+    monkeypatch.setattr(app_module, "main", lambda argv=None, **kw: seen.append(argv))
+    cli.main(["widget", "--keyless"])
+    assert seen == [["--keyless"]]

@@ -26,6 +26,7 @@ class WidgetState:
     quotes_at: datetime | None = None
     calibration: Calibration | None = None
     feed_status: str = "connecting"
+    feed_mode: str = ""  # "keyed" or "keyless"
     error: str | None = None
     history_at: datetime | None = None
     loading: bool = False  # a history load is in progress

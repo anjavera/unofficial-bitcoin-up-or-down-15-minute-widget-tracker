@@ -96,3 +96,40 @@ def test_widget_history_skips_volume_and_shares_the_cli_cache(monkeypatch):
     monkeypatch.setattr(sources_module, "load_history", lambda api, now, **kw: seen.update(kw) or [])
     default_sources().load_history(NOW)
     assert seen["with_volume"] is False and seen["cache_path"] == HISTORY_CACHE
+
+
+def feed_type(sources):
+    return type(sources.feed_factory(lambda tick: None)).__name__
+
+
+def test_without_credentials_the_mode_is_keyless(monkeypatch):
+    from btc15_widget import sources as sources_module
+
+    monkeypatch.setattr(sources_module, "has_credentials", lambda: False)
+    ds = default_sources()
+    try:
+        assert ds.mode == "keyless" and feed_type(ds) == "PollingFeed"
+    finally:
+        ds.close()
+
+
+def test_with_credentials_the_mode_is_keyed_and_uses_the_live_feed(monkeypatch):
+    from btc15_widget import sources as sources_module
+
+    monkeypatch.setattr(sources_module, "has_credentials", lambda: True)
+    ds = default_sources()
+    try:
+        assert ds.mode == "keyed" and feed_type(ds) == "LiveFeed"
+    finally:
+        ds.close()
+
+
+def test_use_keys_false_forces_keyless_even_when_keys_exist(monkeypatch):
+    from btc15_widget import sources as sources_module
+
+    monkeypatch.setattr(sources_module, "has_credentials", lambda: True)
+    ds = default_sources(use_keys=False)
+    try:
+        assert ds.mode == "keyless" and feed_type(ds) == "PollingFeed"
+    finally:
+        ds.close()
