@@ -2,7 +2,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from btc15_widget.history import fetch_window, load_history, with_retry
+from polymarket_us.errors import NotFoundError
+
+from btc15_widget.history import NO_MARKET, fetch_window, load_history, with_retry
 from btc15_widget.windows import event_slug
 
 UTC = timezone.utc
@@ -189,3 +191,35 @@ def test_cached_windows_without_a_volume_are_refetched_when_volume_is_wanted(tmp
     c = FakeClient(settled_responses())
     ws = load_history(c, NOW, hours=1, cache_path=cache, sleep=nosleep, with_volume=True)
     assert all(w.volume == pytest.approx(163510.71) for w in ws)
+
+
+def not_found():
+    err = NotFoundError.__new__(NotFoundError)
+    Exception.__init__(err, "The server was unable to process your request.")
+    return err
+
+
+def test_a_missing_market_is_labelled_as_no_market_in_the_bulk_path():
+    ws = load_history(FakeClient({}), NOW, hours=1, sleep=nosleep)
+    assert all(w.error == NO_MARKET for w in ws) and NO_MARKET == "no such market"
+
+
+def test_not_found_is_not_retried_and_is_labelled_no_market():
+    sleeps, calls = [], []
+
+    def boom():
+        calls.append(1)
+        raise not_found()
+
+    with pytest.raises(NotFoundError):
+        with_retry(boom, tries=4, sleep=sleeps.append)
+    assert calls == [1] and sleeps == []  # a 404 will not change by asking again right away
+
+    class Client404:
+        class events:
+            @staticmethod
+            def retrieve_by_slug(slug):
+                raise not_found()
+
+    w = fetch_window(Client404(), datetime(2026, 9, 29, 9, 0, tzinfo=UTC), sleep=sleeps.append)
+    assert w.error == NO_MARKET and sleeps == []

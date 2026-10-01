@@ -137,3 +137,28 @@ def test_feed_stops_when_event_already_set():
         await asyncio.wait_for(PollingFeed(lambda t: None, lambda s: book_response(s), clock=lambda: T0).run(stop), 2)
 
     asyncio.run(scenario())
+
+
+def test_a_missing_market_is_polled_gently_not_with_growing_backoff():
+    from polymarket_us.errors import NotFoundError
+
+    def not_found(slug):
+        err = NotFoundError.__new__(NotFoundError)
+        Exception.__init__(err, "unable to process")
+        raise err
+
+    sleeps, ticks = [], []
+    feed = make_feed(not_found, ticks, sleeps=sleeps)
+
+    async def scenario():
+        stop = asyncio.Event()
+        task = asyncio.create_task(feed.run(stop))
+        for _ in range(200):
+            if len(sleeps) >= 4:
+                break
+            await asyncio.sleep(0.005)
+        stop.set()
+        await asyncio.wait_for(task, 5)
+
+    asyncio.run(scenario())
+    assert sleeps[:4] == [10, 10, 10, 10]  # steady, polite re-checks while the market does not exist

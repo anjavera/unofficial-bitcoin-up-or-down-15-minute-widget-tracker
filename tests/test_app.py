@@ -425,3 +425,22 @@ def test_status_line_says_whether_keys_are_in_use(tmp_path):
                 assert f"({mode})" in app.last_paint["status"]
 
     run(scenario())
+
+
+def test_status_says_when_polymarket_has_no_live_market(tmp_path):
+    from btc15_widget.history import NO_MARKET
+
+    def no_live_market(now):
+        ws = history()
+        ws[-1] = Window(ws[-1].start, open=None, close=None, error=NO_MARKET)
+        return ws
+
+    async def scenario():
+        app = make_app(tmp_path, load=no_live_market)
+        async with app.run_test(size=(100, 30)) as pilot:
+            assert await until(pilot, lambda: app.state.windows)
+            app.refresh_view()
+            assert "no market yet" in app.last_paint["status"]
+            assert "beat —" in app.last_paint["header"]
+
+    run(scenario())

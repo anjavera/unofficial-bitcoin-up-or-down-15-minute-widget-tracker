@@ -8,6 +8,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from polymarket_us.errors import NotFoundError
+
 from btc15_widget.model import Window
 from btc15_widget.paths import cache_dir
 from btc15_widget.windows import MARKET_SLUG, event_slug, floor_window
@@ -17,12 +19,15 @@ PAUSE_BETWEEN_FETCHES = 0.4  # stay clear of the Cloudflare 1015 rate limit (per
 BREAKER_AFTER = 3  # consecutive failed windows before later ones are tried once, without backoff
 BULK_CHUNK = 100  # slugs per events.list request
 BULK_TRIES = 2
+NO_MARKET = "no such market"  # Polymarket has not published (or never had) a market for this window
 
 
 def with_retry(fn, tries: int = 4, sleep=time.sleep):
     for attempt in range(tries):
         try:
             return fn()
+        except NotFoundError:
+            raise  # a 404 will not change by asking again right away
         except Exception:
             if attempt == tries - 1:
                 raise
@@ -67,6 +72,8 @@ def fetch_window(client, start: datetime, sleep=time.sleep, tries: int = 4, with
     try:
         event = with_retry(lambda: client.events.retrieve_by_slug(event_slug(start)), tries, sleep)["event"]
         window = _window_from_event(start, event)
+    except NotFoundError:
+        return _gap(start, NO_MARKET)
     except Exception as e:
         return _gap(start, str(e) or type(e).__name__)
     if with_volume and not window.error:
@@ -84,7 +91,7 @@ def fetch_windows_bulk(client, starts: list[datetime], sleep=time.sleep) -> dict
         by_slug = {e["slug"]: e for e in response.get("events", [])}
         for start, slug in zip(chunk, slugs):
             event = by_slug.get(slug)
-            found[start] = _gap(start, "no such market") if event is None else _window_from_event(start, event)
+            found[start] = _gap(start, NO_MARKET) if event is None else _window_from_event(start, event)
     return found
 
 

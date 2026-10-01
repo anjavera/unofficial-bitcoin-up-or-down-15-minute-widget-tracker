@@ -237,3 +237,20 @@ def test_legend_minus_marks_the_net_down_row():
     down = next(l for l in lines if l.startswith("net down"))
     assert "1000+" in up and "1000-" not in up
     assert "1000-" in down and "1000+" not in down
+
+
+def test_a_window_with_no_market_says_none_not_gap():
+    from btc15_widget.history import NO_MARKET
+
+    none_window = Window(T0, open=None, close=None, error=NO_MARKET)
+    failed = Window(T0 + timedelta(minutes=15), open=None, close=None, error="timeout")
+    table = build_table([none_window, failed], "dark", volume=False)
+    results = [c.plain.strip() for c in table_cells(table, "Result")]
+    assert results == ["none", "gap"]
+
+
+def test_table_legend_explains_none_and_gap_within_80_columns():
+    lines = render_legend("dark", "table").plain.split("\n")
+    assert all(len(line) <= 80 for line in lines)
+    note = lines[-1]
+    assert "none" in note and "gap" in note and "no market" in note

@@ -8,6 +8,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime, timezone
 
+from polymarket_us.errors import NotFoundError
 from polymarket_us.websocket import MarketsWebSocket
 
 from btc15_widget.client import load_credentials
@@ -16,6 +17,7 @@ from btc15_widget.windows import MARKET_SLUG, floor_window, window_slugs
 
 POLL_EVERY = 2.0  # seconds between price polls
 MAX_BACKOFF = 60
+NO_MARKET_RETRY = 10  # seconds between checks while Polymarket has no market for the live window
 SESSION_SECONDS = 3600  # keyed feed: re-subscribe hourly so the window list stays current
 WINDOWS_TO_FOLLOW = 6  # must cover SESSION_SECONDS plus the rest of the current window
 
@@ -85,6 +87,8 @@ class PollingFeed:
             slug = MARKET_SLUG.format(floor_window(self._clock()))  # re-read each time: follows the rollover
             try:
                 tick = parse_book(await asyncio.to_thread(self._fetch, slug))
+            except NotFoundError:  # no market published for this window: check again gently, this is not an outage
+                delay = NO_MARKET_RETRY
             except Exception:  # network error, rate limit or odd response: back off and keep going
                 failures += 1
                 delay = min(5 * failures, MAX_BACKOFF)

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from btc15_widget.calibration import Calibration
+from btc15_widget.history import NO_MARKET
 from btc15_widget.model import LiveTick, Window
 from btc15_widget.proxy import apply_bias, composite
 from btc15_widget.windows import MARKET_SLUG, floor_window
@@ -64,6 +65,11 @@ class WidgetState:
         start = floor_window(now)
         return self._by_start().get(start) or Window(start=start, open=None, close=None)
 
+    def live_market_missing(self, now: datetime) -> bool:
+        """True when history says Polymarket has not published a market for the live window."""
+        window = self._by_start().get(floor_window(now))
+        return window is not None and window.error == NO_MARKET
+
     def is_stale(self, kind: str, now: datetime) -> bool:
         at = self.ticks_at.get(MARKET_SLUG.format(floor_window(now))) if kind == "tick" else self.quotes_at
         return at is None or (now - at).total_seconds() > STALE_SECONDS
@@ -87,6 +93,7 @@ class WidgetState:
         if live not in self._by_start():
             return True
         age = (now - self.history_at).total_seconds()
-        if any(not w.settled for w in self.windows if w.start < live) and age > RETRY_UNSETTLED_AFTER:
+        waiting = any(not w.settled for w in self.windows if w.start < live) or self.live_market_missing(now)
+        if waiting and age > RETRY_UNSETTLED_AFTER:
             return True
         return age > REFRESH_EVERY

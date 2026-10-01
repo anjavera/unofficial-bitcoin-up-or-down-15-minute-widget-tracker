@@ -12,6 +12,7 @@ from rich.table import Table
 from rich.text import Text
 
 from btc15_widget.colors import BAND_EDGES, net_color, result_color, text_on
+from btc15_widget.history import NO_MARKET
 from btc15_widget.model import Window
 from btc15_widget.state import WidgetState
 from btc15_widget.windows import seconds_remaining
@@ -72,7 +73,7 @@ def render_legend(theme: str, view: str = "strip") -> Text:
     text.append_text(_band_swatches(theme, +1))
     text.append("\nnet down ")
     text.append_text(_band_swatches(theme, -1))
-    note = ("-  not yet settled   gap  fetch failed   ≈  live exchange estimate" if view == "table"
+    note = ("-  unsettled   none  no market   gap  fetch failed   ≈  exchange estimate" if view == "table"
             else "?  pending (not yet settled)   ·  gap (fetch failed)")
     text.append(f"\n{note}", style=DIM)
     return text
@@ -166,7 +167,7 @@ def build_table(windows: list[Window], theme: str, volume: bool = True,
         empty = (_table_cell("-", width["Chg $"], style=dim), _table_cell("-", width["Chg %"], style=dim))
         is_live = live_start is not None and w.start == live_start and not w.settled and not w.error
         if w.error:
-            result = _table_cell("gap", width["Result"], "^", dim)
+            result = _table_cell("none" if w.error == NO_MARKET else "gap", width["Result"], "^", dim)
             chg, pct = empty
         elif w.net is not None or (is_live and live_price is not None and w.open is not None):
             provisional = w.net is None

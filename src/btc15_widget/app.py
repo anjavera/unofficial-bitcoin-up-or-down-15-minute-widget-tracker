@@ -204,6 +204,8 @@ class WidgetApp(App):
     def _feed_status(self, now: datetime) -> str:
         if self._sources is None:
             return "offline"
+        if self.state.live_market_missing(now):
+            return "no market yet"  # Polymarket has not published this window's market
         if self.state.live_tick(now) is None:
             return "connecting"
         return "reconnecting" if self.state.is_stale("tick", now) else "live"
@@ -287,8 +289,10 @@ def _print_snapshot(sources: DataSources, clock: Callable[[], datetime]) -> None
     state.set_history(sources.load_history(now), now)
     state.apply_quotes(sources.fetch_quotes(), clock())
     run_calibration(state, sources, now)
-    asyncio.run(_collect_tick(sources, state, clock))
-    state.feed_status = "live" if state.live_tick(clock()) else "no live tick"
+    if not state.live_market_missing(now):  # with no market published there is nothing to listen to
+        asyncio.run(_collect_tick(sources, state, clock))
+    state.feed_status = ("no market yet" if state.live_market_missing(now)
+                         else "live" if state.live_tick(clock()) else "no live tick")
     state.feed_mode = sources.mode
     print(snapshot_text(state, clock(), THEME))
 

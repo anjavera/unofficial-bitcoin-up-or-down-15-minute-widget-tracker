@@ -101,3 +101,28 @@ def test_pm_widget_passes_keyless_through(monkeypatch):
     monkeypatch.setattr(app_module, "main", lambda argv=None, **kw: seen.append(argv))
     cli.main(["widget", "--keyless"])
     assert seen == [["--keyless"]]
+
+
+def test_snapshot_explains_a_missing_live_market_without_waiting_for_a_tick(tmp_path, capsys):
+    import time
+    from btc15_widget.history import NO_MARKET
+
+    def no_live_market(now):
+        ws = history()
+        ws[-1] = Window(ws[-1].start, open=None, close=None, error=NO_MARKET)
+        return ws
+
+    class NeverTicks:
+        def __init__(self, on_tick):
+            pass
+
+        async def run(self, stop):
+            await stop.wait()
+
+    sources = fake_sources()
+    sources.load_history = no_live_market
+    sources.feed_factory = lambda on_tick: NeverTicks(on_tick)
+    started = time.monotonic()
+    run_main(["--snapshot"], tmp_path, sources)
+    assert time.monotonic() - started < 3  # the 5 s tick timeout is skipped when there is no market to listen to
+    assert "feed: no market yet" in capsys.readouterr().out

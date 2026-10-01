@@ -153,3 +153,30 @@ def test_table_windows_are_the_strip_plus_the_live_window():
     rows = s.table_windows(NOW)
     assert len(rows) == 97
     assert rows[-1].start == floor_window(NOW) and rows[:-1] == s.strip_windows(NOW)
+
+
+def test_live_market_missing_flag():
+    from btc15_widget.history import NO_MARKET
+
+    s = state_with()
+    assert s.live_market_missing(NOW) is False  # the live window exists
+    ws = history()
+    ws[-1] = Window(ws[-1].start, open=None, close=None, error=NO_MARKET)
+    s.set_history(ws, NOW)
+    assert s.live_market_missing(NOW) is True
+    ws[-1] = Window(ws[-1].start, open=None, close=None, error="boom")  # a fetch failure is not a missing market
+    s.set_history(ws, NOW)
+    assert s.live_market_missing(NOW) is False
+    assert WidgetState().live_market_missing(NOW) is False
+
+
+def test_a_missing_live_market_is_rechecked_every_20_seconds():
+    from btc15_widget.history import NO_MARKET
+
+    ws = history()
+    ws[-1] = Window(ws[-1].start, open=None, close=None, error=NO_MARKET)
+    s = WidgetState()
+    s.set_history(ws, NOW - timedelta(seconds=10))
+    assert not s.needs_history_refresh(NOW)
+    s.set_history(ws, NOW - timedelta(seconds=25))
+    assert s.needs_history_refresh(NOW)  # so the widget notices the moment Polymarket publishes the window
