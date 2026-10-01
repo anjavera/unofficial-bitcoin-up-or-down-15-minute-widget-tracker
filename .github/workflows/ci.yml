@@ -1,9 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  push:            # every branch, so work is checked on all three systems before it reaches main
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
